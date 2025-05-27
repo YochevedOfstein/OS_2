@@ -13,9 +13,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-// Buffer size for reading commands
+
 constexpr size_t READ_BUFFER = 1024;
-// Maximum atoms (10^18)
 constexpr unsigned long long MAX_ATOMS = 1000000000000000000ULL;
 
 // Map molecule name to its atom requirements: {C, H, O}
@@ -31,20 +30,57 @@ int setNonBlocking(int fd) {
     return (flags < 0) ? -1 : fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-void processTcpCommand(int fd, const std::string& line,
-                       unsigned long long& carbon,
-                       unsigned long long& oxygen,
-                       unsigned long long& hydrogen) {
-    // reuse ADD logic from warehouse_atom (not shown)
+void sendStatus(int fd, unsigned long long carbon, unsigned long long oxygen, unsigned long long hydrogen) {
+    std::ostringstream oss;
+    oss << "CARBON: " << carbon << "\n"
+        << "OXYGEN" << oxygen << "\n"
+        << "HYDROGEN" << hydrogen << "\n";
+    std::string status = oss.str();
+    send(fd, status.c_str(), status.size(), 0);
 }
 
-void processUdpCommand(int sock,
-                       const std::string& line,
-                       const sockaddr_in& cli_addr,
-                       socklen_t cli_len,
-                       unsigned long long& carbon,
-                       unsigned long long& oxygen,
-                       unsigned long long& hydrogen) {
+void processTcpCommand(int fd, const std::string& line, unsigned long long& carbon, unsigned long long& oxygen, unsigned long long& hydrogen) {
+    std::istringstream iss(line);
+    std::string cmd, type;
+    unsigned long long amount;
+
+    if(!(iss >> cmd >> type >> amount) || cmd != "ADD" || amount > MAX_ATOMS) {
+        // std::string err = "Invalid command format\n";
+        const char* err = "ERROR: Invalid command\n";
+        send(fd, err, strlen(err), 0);
+        return;
+    }
+
+    unsigned long long *counter = nullptr;
+    if (type == "CARBON") {
+        counter = &carbon;
+    } else if (type == "HYDROGEN") {
+        counter = &hydrogen;
+    } else if (type == "OXYGEN") {
+        counter = &oxygen;
+    } else {
+        // std::string err = "Unknown atom type\n";
+        // send(client_fd, err.c_str(), err.size(), 0);
+        const char* err = "ERROR: Unknown atom type\n";
+        send(fd, err, strlen(err), 0);
+        return;
+    }
+
+    if (*counter + amount > MAX_ATOMS || *counter + amount < *counter) {
+        // Check for overflow
+
+        // std::string err = "Overflow error\n";
+        // send(client_fd, err.c_str(), err.size(), 0);
+        const char* err = "ERROR: Overflow error\n";
+        send(fd, err, strlen(err), 0);
+        return;
+    }
+
+    *counter += amount;
+    sendStatus(fd, carbon, hydrogen, oxygen);
+}
+
+void processUdpCommand(int sock, const std::string& line, const sockaddr_in& cli_addr, socklen_t cli_len, unsigned long long& carbon, unsigned long long& oxygen, unsigned long long& hydrogen) {
     std::istringstream iss(line);
     std::string cmd;
     unsigned long long count;
@@ -121,9 +157,9 @@ int main(int argc, char* argv[]) {
     // 2) Set up UDP socket
     int udpSock = socket(AF_INET, SOCK_DGRAM, 0);
     sockaddr_in udp_addr{};
-    udp_addr.sin_family      = AF_INET;
+    udp_addr.sin_family = AF_INET;
     udp_addr.sin_addr.s_addr = INADDR_ANY;
-    udp_addr.sin_port        = htons(udp_port);
+    udp_addr.sin_port = htons(udp_port);
     bind(udpSock, (sockaddr*)&udp_addr, sizeof(udp_addr));
     setNonBlocking(udpSock);
 
@@ -168,8 +204,33 @@ int main(int argc, char* argv[]) {
                                   cli_len, carbon, oxygen, hydrogen);
             }
         }
-        // Handle existing TCP clients (not shown)
+        
+        for(auto it = clients.begin(); it != clients.end();) {
+            int client_fd = *it;
+            if (FD_ISSET(client_fd, &read_fds)) {
+                char buffer[READ_BUFFER];
+                ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer), 0);
+                if (bytes_read <= 0) {
+                    // Client disconnected
+                    close(client_fd);
+                    it = clients.erase(it);
+                    continue;
+                }
+                buffer[bytes_read] = '\0';
+                std::string line(buffer);
+                if (!line.empty() && line.back() == '\n')
+                    line.pop_back();
+                processTcpCommand(client_fd, line, carbon, oxygen, hydrogen);
+            }
+            ++it;
+        }
     }
 
-    return EXIT_SUCCESS;
+    for(int client_fd : clients) {
+        close(client_fd);
+    }
+    close(listener);
+    close(udpSock);
+
+    return 0;
 }

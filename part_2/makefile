@@ -1,10 +1,10 @@
 CXX = g++ 
 CXXFLAGS = -std=c++11 -Wall -Wextra -O2
-TARGETS = atom_warehouse atom_supplier molecule_supplier molecule_requestor
+TARGETS = atom_warehouse atom_supplier molecule_supplier molecule_requester
 
 all: $(TARGETS)
 
-molecule_requestor: molecule_requestor.cpp
+molecule_requester: molecule_requester.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 molecule_supplier: molecule_supplier.cpp
