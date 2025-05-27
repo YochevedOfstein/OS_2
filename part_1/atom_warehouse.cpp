@@ -37,7 +37,6 @@ void processCommand(int client_fd, const std::string& command, unsigned long lon
     unsigned long long amount;
 
     if(!(iss >> cmd >> type >> amount) || cmd != "ADD" || amount > MAX_ATOMS) {
-        // std::string err = "Invalid command format\n";
         const char* err = "ERROR: Invalid command\n";
         send(client_fd, err, strlen(err), 0);
         return;
@@ -51,18 +50,12 @@ void processCommand(int client_fd, const std::string& command, unsigned long lon
     } else if (type == "OXYGEN") {
         counter = &oxygen;
     } else {
-        // std::string err = "Unknown atom type\n";
-        // send(client_fd, err.c_str(), err.size(), 0);
         const char* err = "ERROR: Unknown atom type\n";
         send(client_fd, err, strlen(err), 0);
         return;
     }
 
     if (*counter + amount > MAX_ATOMS || *counter + amount < *counter) {
-        // Check for overflow
-
-        // std::string err = "Overflow error\n";
-        // send(client_fd, err.c_str(), err.size(), 0);
         const char* err = "ERROR: Overflow error\n";
         send(client_fd, err, strlen(err), 0);
         return;

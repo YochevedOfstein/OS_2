@@ -39,13 +39,12 @@ void sendStatus(int fd, unsigned long long carbon, unsigned long long oxygen, un
     send(fd, status.c_str(), status.size(), 0);
 }
 
-void processTcpCommand(int fd, const std::string& line, unsigned long long& carbon, unsigned long long& oxygen, unsigned long long& hydrogen) {
+void processTCPCommand(int fd, const std::string& line, unsigned long long& carbon, unsigned long long& oxygen, unsigned long long& hydrogen) {
     std::istringstream iss(line);
     std::string cmd, type;
     unsigned long long amount;
 
     if(!(iss >> cmd >> type >> amount) || cmd != "ADD" || amount > MAX_ATOMS) {
-        // std::string err = "Invalid command format\n";
         const char* err = "ERROR: Invalid command\n";
         send(fd, err, strlen(err), 0);
         return;
@@ -59,18 +58,12 @@ void processTcpCommand(int fd, const std::string& line, unsigned long long& carb
     } else if (type == "OXYGEN") {
         counter = &oxygen;
     } else {
-        // std::string err = "Unknown atom type\n";
-        // send(client_fd, err.c_str(), err.size(), 0);
         const char* err = "ERROR: Unknown atom type\n";
         send(fd, err, strlen(err), 0);
         return;
     }
 
     if (*counter + amount > MAX_ATOMS || *counter + amount < *counter) {
-        // Check for overflow
-
-        // std::string err = "Overflow error\n";
-        // send(client_fd, err.c_str(), err.size(), 0);
         const char* err = "ERROR: Overflow error\n";
         send(fd, err, strlen(err), 0);
         return;
@@ -80,7 +73,7 @@ void processTcpCommand(int fd, const std::string& line, unsigned long long& carb
     sendStatus(fd, carbon, hydrogen, oxygen);
 }
 
-void processUdpCommand(int sock, const std::string& line, const sockaddr_in& cli_addr, socklen_t cli_len, unsigned long long& carbon, unsigned long long& oxygen, unsigned long long& hydrogen) {
+void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli_addr, socklen_t cli_len, unsigned long long& carbon, unsigned long long& oxygen, unsigned long long& hydrogen) {
     std::istringstream iss(line);
     std::string cmd;
     unsigned long long count;
@@ -200,8 +193,7 @@ int main(int argc, char* argv[]) {
                 std::string line(buf, n);
                 if (!line.empty() && line.back() == '\n')
                     line.pop_back();
-                processUdpCommand(udpSock, line, cli_addr,
-                                  cli_len, carbon, oxygen, hydrogen);
+                processUDPCommand(udpSock, line, cli_addr, cli_len, carbon, oxygen, hydrogen);
             }
         }
         
@@ -220,7 +212,7 @@ int main(int argc, char* argv[]) {
                 std::string line(buffer);
                 if (!line.empty() && line.back() == '\n')
                     line.pop_back();
-                processTcpCommand(client_fd, line, carbon, oxygen, hydrogen);
+                processTCPCommand(client_fd, line, carbon, oxygen, hydrogen);
             }
             ++it;
         }
