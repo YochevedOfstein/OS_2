@@ -71,7 +71,7 @@ void processTCPCommand(int fd, const std::string& line, unsigned long long& carb
     }
 
     *counter += amount;
-    sendTCPStatus(fd, carbon, hydrogen, oxygen);
+    sendTCPStatus(fd, carbon, oxygen, hydrogen);
 }
 
 void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli_addr, socklen_t cli_len, unsigned long long& carbon, unsigned long long& oxygen, unsigned long long& hydrogen) {
@@ -247,7 +247,6 @@ int main(int argc, char* argv[]) {
                 char buffer[READ_BUFFER];
                 ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer), 0);
                 if (bytes_read <= 0) {
-                    // Client disconnected
                     close(client_fd);
                     it = clients.erase(it);
                     std::cout << "TCP client disconnected\n";
