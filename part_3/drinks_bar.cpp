@@ -22,7 +22,7 @@ constexpr unsigned long long MAX_ATOMS = 1000000000000000000ULL;
 const std::map<std::string, std::array<unsigned long long,3>> molecule_req = {
     {"WATER",          {0, 2, 1}}, // H2O
     {"CARBON DIOXIDE", {1, 0, 2}}, // CO2
-    {"GLUCOSE",        {6,12, 6}}, // C6H12O6
+    {"GLUCOSE",        {6, 12, 6}}, // C6H12O6
     {"ALCOHOL",        {2, 6, 1}}, // C2H6O
 };
 
@@ -129,7 +129,7 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
         oss << "OK" << "\n" 
         << "CARBON: " << carbon << "\n"
         << "OXYGEN: " << oxygen << "\n"
-        << "HYDROGEN: " << hydrogen;
+        << "HYDROGEN: " << hydrogen << "\n" ;
         std::string ok = oss.str();
         sendto(sock, ok.c_str(), ok.size(), 0, (const sockaddr*)&cli_addr, cli_len);
     } else {
@@ -194,14 +194,54 @@ int main(int argc, char* argv[]) {
     fd_set read_fds;
     while (true) {
         FD_ZERO(&read_fds);
+        FD_SET(STDIN_FILENO, &read_fds);
         FD_SET(listener, &read_fds);
         FD_SET(udpSock, &read_fds);
-        int max_fd = std::max(listener, udpSock);
-        for (int fd : clients) {
+
+        for(int fd : clients) {
             FD_SET(fd, &read_fds);
+        }
+
+        int max_fd = listener;
+        max_fd = std::max(max_fd, udpSock);
+        max_fd = std::max(max_fd, STDIN_FILENO);
+        for(int fd : clients) {
             max_fd = std::max(max_fd, fd);
         }
-        select(max_fd + 1, &read_fds, nullptr, nullptr, nullptr);
+
+        int ready = select(max_fd + 1, &read_fds, nullptr, nullptr, nullptr);
+        if (ready < 0) {
+            std::cerr << "Error in select\n";
+            break;
+        }
+
+        if(FD_ISSET(STDIN_FILENO, &read_fds)) {
+            std::string input;
+            std::getline(std::cin, input);
+            if(std::getline(std::cin, input) ) {
+               if("GET SOFT DRINK"){
+                    auto nwater = std::min(hydrogen / 2, oxygen);
+                    auto nco2 = std::min(carbon, oxygen / 2);
+                    auto nglucose = std::min(carbon / 6, hydrogen / 12, oxygen / 6);
+                    std::cout << "SOFT DRINK: " << nwater + nco2 + nglucose << "\n";
+               }
+               else if("GET VODKA"){
+                    auto nwater = std::min(hydrogen / 6, oxygen);
+                    auto nalcohol = std::min(carbon / 2, hydrogen / 6, oxygen);
+                    auto nglucose = std::min(carbon / 2, hydrogen / 12, oxygen / 6);
+                    std::cout << "VODKA: " << nwater + nalcohol + nglucose << "\n";
+               }
+               else if("GET CHAMPAGNE"){
+                    auto nwater = std::min(hydrogen / 2, oxygen);
+                    auto nco2 = std::min(carbon, oxygen / 2);
+                    auto nalcohol = std::min(carbon / 2, hydrogen / 6, oxygen);
+                    std::cout << "CHAMPAGNE: " << nwater + nco2 + nalcohol << "\n";
+               }
+               else{
+                   std::cout << "Unknown command\n";
+               }
+            }
+        }
 
         // Handle new TCP connections
         if (FD_ISSET(listener, &read_fds)) {
