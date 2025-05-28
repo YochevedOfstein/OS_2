@@ -82,6 +82,7 @@ int main(int argc, char* argv[]) {
         if(!resp.empty() && resp.back() != '\n') {
             resp.push_back('\n');
         }
+        std::cout << "Response from server: " << resp;
     }
     freeaddrinfo(res);
     close(sock);

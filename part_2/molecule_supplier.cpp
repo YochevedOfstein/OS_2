@@ -12,6 +12,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <set>
 
 
 constexpr size_t READ_BUFFER = 1024;
@@ -30,11 +31,11 @@ int setNonBlocking(int fd) {
     return (flags < 0) ? -1 : fcntl(fd, F_SETFL, flags | O_NONBLOCK);
 }
 
-void sendStatus(int fd, unsigned long long carbon, unsigned long long oxygen, unsigned long long hydrogen) {
+void sendTCPStatus(int fd, unsigned long long carbon, unsigned long long oxygen, unsigned long long hydrogen) {
     std::ostringstream oss;
     oss << "CARBON: " << carbon << "\n"
-        << "OXYGEN" << oxygen << "\n"
-        << "HYDROGEN" << hydrogen << "\n";
+        << "OXYGEN: " << oxygen << "\n"
+        << "HYDROGEN: " << hydrogen << "\n";
     std::string status = oss.str();
     send(fd, status.c_str(), status.size(), 0);
 }
@@ -70,7 +71,7 @@ void processTCPCommand(int fd, const std::string& line, unsigned long long& carb
     }
 
     *counter += amount;
-    sendStatus(fd, carbon, hydrogen, oxygen);
+    sendTCPStatus(fd, carbon, hydrogen, oxygen);
 }
 
 void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli_addr, socklen_t cli_len, unsigned long long& carbon, unsigned long long& oxygen, unsigned long long& hydrogen) {
@@ -124,36 +125,65 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
         carbon   -= needC;
         hydrogen -= needH;
         oxygen   -= needO;
-        const char* ok = "OK\n";
-        sendto(sock, ok, strlen(ok), 0,
-               (const sockaddr*)&cli_addr, cli_len);
+        std::ostringstream oss;
+        oss << "OK" << "\n" 
+        << "CARBON: " << carbon << "\n"
+        << "OXYGEN: " << oxygen << "\n"
+        << "HYDROGEN: " << hydrogen << "\n" ;
+        std::string ok = oss.str();
+        sendto(sock, ok.c_str(), ok.size(), 0, (const sockaddr*)&cli_addr, cli_len);
     } else {
         const char* err = "ERROR: insufficient atoms\n";
-        sendto(sock, err, strlen(err), 0,
-               (const sockaddr*)&cli_addr, cli_len);
+        sendto(sock, err, strlen(err), 0, (const sockaddr*)&cli_addr, cli_len);
     }
 }
 
 int main(int argc, char* argv[]) {
+    std::set<std::string> udp_peers; // Track UDP peers if needed
     if (argc != 3) {
-        std::cerr << "Usage: " << argv[0]
-                  << " <tcp_port> <udp_port>\n";
-        return EXIT_FAILURE;
+        std::cerr << "Usage: " << argv[0] << " <tcp_port> <udp_port>\n";
+        return 1;
     }
     int tcp_port = std::stoi(argv[1]);
     int udp_port = std::stoi(argv[2]);
 
-    // 1) Set up TCP listener (as before)
+    // --- TCP socket setup ---
     int listener = socket(AF_INET, SOCK_STREAM, 0);
-    // bind, listen, setNonBlocking(listener)...
+    if (listener < 0) {
+        std::cerr << "Error creating TCP socket\n";
+        return 1;
+    }
+    int opt = 1;
+    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = INADDR_ANY;
+    addr.sin_port = htons(tcp_port);
+    if (bind(listener, (sockaddr*)&addr, sizeof(addr)) < 0) {
+        std::cerr << "Error binding TCP socket\n";
+        return 1;
+    }
+    if (listen(listener, SOMAXCONN) < 0) {
+        std::cerr << "Error listening on TCP socket\n";
+        return 1;
+    }
+    setNonBlocking(listener);
+    
 
-    // 2) Set up UDP socket
+    // --- UDP socket setup ---
     int udpSock = socket(AF_INET, SOCK_DGRAM, 0);
+    if (udpSock < 0) {
+        std::cerr << "Error creating UDP socket\n";
+        return 1;
+    }
     sockaddr_in udp_addr{};
     udp_addr.sin_family = AF_INET;
     udp_addr.sin_addr.s_addr = INADDR_ANY;
     udp_addr.sin_port = htons(udp_port);
-    bind(udpSock, (sockaddr*)&udp_addr, sizeof(udp_addr));
+    if(bind(udpSock, (sockaddr*)&udp_addr, sizeof(udp_addr)) < 0) {
+        std::cerr << "Error binding UDP socket\n";
+        return 1;
+    }
     setNonBlocking(udpSock);
 
     // Shared state
@@ -177,24 +207,38 @@ int main(int argc, char* argv[]) {
         if (FD_ISSET(listener, &read_fds)) {
             sockaddr_in cli_addr{};
             socklen_t cli_len = sizeof(cli_addr);
-            int client_fd = accept(listener,
-                        (sockaddr*)&cli_addr, &cli_len);
+            int client_fd = accept(listener, (sockaddr*)&cli_addr, &cli_len);
+            if( client_fd < 0) {
+                std::cerr << "Error accepting TCP connection\n";
+                continue;
+            }
             setNonBlocking(client_fd);
             clients.push_back(client_fd);
+            std::cout << "New TCP client connected: " << inet_ntoa(cli_addr.sin_addr) << ":" << ntohs(cli_addr.sin_port) << "\n";
         }
         // Handle UDP requests
         if (FD_ISSET(udpSock, &read_fds)) {
             char buf[READ_BUFFER];
             sockaddr_in cli_addr{};
             socklen_t cli_len = sizeof(cli_addr);
-            ssize_t n = recvfrom(udpSock, buf, sizeof(buf), 0,
-                                 (sockaddr*)&cli_addr, &cli_len);
-            if (n > 0) {
-                std::string line(buf, n);
-                if (!line.empty() && line.back() == '\n')
-                    line.pop_back();
-                processUDPCommand(udpSock, line, cli_addr, cli_len, carbon, oxygen, hydrogen);
+            ssize_t n = recvfrom(udpSock, buf, sizeof(buf), 0, (sockaddr*)&cli_addr, &cli_len);
+            if (n < 0) {
+                std::cerr << "Error receiving UDP data\n";
+                break;
             }
+            char ip[INET_ADDRSTRLEN];
+            inet_ntop(AF_INET, &cli_addr.sin_addr, ip, sizeof(ip));
+            int port = ntohs(cli_addr.sin_port);
+            std::string peer_id = std::string(ip) + ":" + std::to_string(port);
+            if (udp_peers.insert(peer_id).second) {
+                std::cout << "New UDP client connected: " << peer_id << "\n";
+            }
+
+            std::string cmd(buf, n);
+            if (!cmd.empty() && cmd.back() == '\n')
+                cmd.pop_back(); // Remove trailing newline
+
+            processUDPCommand(udpSock, cmd, cli_addr, cli_len, carbon, oxygen, hydrogen);
         }
         
         for(auto it = clients.begin(); it != clients.end();) {
@@ -206,6 +250,7 @@ int main(int argc, char* argv[]) {
                     // Client disconnected
                     close(client_fd);
                     it = clients.erase(it);
+                    std::cout << "TCP client disconnected\n";
                     continue;
                 }
                 buffer[bytes_read] = '\0';
