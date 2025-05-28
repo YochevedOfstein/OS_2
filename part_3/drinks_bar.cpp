@@ -13,7 +13,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <set>
-
+#include <algorithm>
 
 constexpr size_t READ_BUFFER = 1024;
 constexpr unsigned long long MAX_ATOMS = 1000000000000000000ULL;
@@ -217,25 +217,27 @@ int main(int argc, char* argv[]) {
 
         if(FD_ISSET(STDIN_FILENO, &read_fds)) {
             std::string input;
-            std::getline(std::cin, input);
             if(std::getline(std::cin, input) ) {
-               if("GET SOFT DRINK"){
+               if(input == "GEN SOFT DRINK"){
                     auto nwater = std::min(hydrogen / 2, oxygen);
                     auto nco2 = std::min(carbon, oxygen / 2);
-                    auto nglucose = std::min(carbon / 6, hydrogen / 12, oxygen / 6);
-                    std::cout << "SOFT DRINK: " << nwater + nco2 + nglucose << "\n";
+                    auto nglucose = std::min({carbon / 6, hydrogen / 12, oxygen / 6});
+                    auto softdrinksamount = std::min({nwater, nco2, nglucose});
+                    std::cout << "SOFT DRINK: " << softdrinksamount << "\n";
                }
-               else if("GET VODKA"){
+               else if(input == "GEN VODKA"){
                     auto nwater = std::min(hydrogen / 6, oxygen);
-                    auto nalcohol = std::min(carbon / 2, hydrogen / 6, oxygen);
-                    auto nglucose = std::min(carbon / 2, hydrogen / 12, oxygen / 6);
-                    std::cout << "VODKA: " << nwater + nalcohol + nglucose << "\n";
+                    auto nalcohol = std::min({carbon / 2, hydrogen / 6, oxygen});
+                    auto nglucose = std::min({carbon / 2, hydrogen / 12, oxygen / 6});
+                    auto vodkaamount = std::min({nwater, nalcohol, nglucose});
+                    std::cout << "VODKA: " << vodkaamount << "\n";
                }
-               else if("GET CHAMPAGNE"){
+               else if(input == "GEN CHAMPAGNE"){
                     auto nwater = std::min(hydrogen / 2, oxygen);
                     auto nco2 = std::min(carbon, oxygen / 2);
-                    auto nalcohol = std::min(carbon / 2, hydrogen / 6, oxygen);
-                    std::cout << "CHAMPAGNE: " << nwater + nco2 + nalcohol << "\n";
+                    auto nalcohol = std::min({carbon / 2, hydrogen / 6, oxygen});
+                    auto champagneamount = std::min({nwater, nco2, nalcohol});
+                    std::cout << "CHAMPAGNE: " << champagneamount << "\n";
                }
                else{
                    std::cout << "Unknown command\n";
