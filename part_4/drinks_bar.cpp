@@ -81,7 +81,7 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
     std::string cmd;
     unsigned long long count;
     if (!(iss >> cmd) || cmd != "DELIVER") {
-        const char* err = "ERROR: invalid command\n";
+        const char* err = "ERROR: invalid command";
         sendto(sock, err, strlen(err), 0,
                (const sockaddr*)&cli_addr, cli_len);
         return;
@@ -92,7 +92,7 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
     while (iss >> token)
         tokens.push_back(token);
     if (tokens.size() < 2) {
-        const char* err = "ERROR: invalid command\n";
+        const char* err = "ERROR: invalid command";
         sendto(sock, err, strlen(err), 0,
                (const sockaddr*)&cli_addr, cli_len);
         return;
@@ -101,7 +101,7 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
     try {
         count = std::stoull(tokens.back());
     } catch (...) {
-        const char* err = "ERROR: invalid number\n";
+        const char* err = "ERROR: invalid number";
         sendto(sock, err, strlen(err), 0,
                (const sockaddr*)&cli_addr, cli_len);
         return;
@@ -114,7 +114,7 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
     }
     auto it = molecule_req.find(mol);
     if (it == molecule_req.end()) {
-        const char* err = "ERROR: unknown molecule\n";
+        const char* err = "ERROR: unknown molecule";
         sendto(sock, err, strlen(err), 0,
                (const sockaddr*)&cli_addr, cli_len);
         return;
@@ -131,11 +131,11 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
         oss << "OK" << "\n" 
         << "CARBON: " << carbon << "\n"
         << "OXYGEN: " << oxygen << "\n"
-        << "HYDROGEN: " << hydrogen << "\n" ;
+        << "HYDROGEN: " << hydrogen;
         std::string ok = oss.str();
         sendto(sock, ok.c_str(), ok.size(), 0, (const sockaddr*)&cli_addr, cli_len);
     } else {
-        const char* err = "ERROR: insufficient atoms\n";
+        const char* err = "ERROR: insufficient atoms";
         sendto(sock, err, strlen(err), 0, (const sockaddr*)&cli_addr, cli_len);
     }
 }
@@ -150,14 +150,14 @@ int main(int argc, char* argv[]) {
         {"oxygen", required_argument, nullptr, 'o'},
         {"hydrogen", required_argument, nullptr, 'h'},
         {"carbon", required_argument, nullptr, 'c'},
-        {"timeout", no_argument, nullptr, 't'},
-        {"tcp-port", no_argument, nullptr, 'T'},
-        {"udp-port", no_argument, nullptr, 'U'},
+        {"timeout", required_argument, nullptr, 't'},
+        {"tcp-port", required_argument, nullptr, 'T'},
+        {"udp-port", required_argument, nullptr, 'U'},
         {nullptr, 0, nullptr, 0}
     };
     
     int opt;
-    while ((opt = getopt_long(argc, argv, "o:h:c:tT:U:", long_options, nullptr)) != -1) {
+    while ((opt = getopt_long(argc, argv, "o:h:c:t:T:U:", long_options, nullptr)) != -1) {
         switch (opt) {
             case 'o':
                 initoxygen = std::stoull(optarg);
@@ -169,7 +169,7 @@ int main(int argc, char* argv[]) {
                 initcarbon = std::stoull(optarg);
                 break;
             case 't':
-                timeout_seconds = 10; // Default timeout
+                timeout_seconds = std::stoi(optarg);
                 break;
             case 'T':
                 tcp_port = std::stoi(optarg);
@@ -192,7 +192,7 @@ int main(int argc, char* argv[]) {
     unsigned long long oxygen = initoxygen;
     unsigned long long hydrogen = inithydrogen;
 
-    std::set<std::string> udp_peers; // Track UDP peers if needed
+    std::set<std::string> udp_peers;
 
     // --- TCP socket setup ---
     int listener = socket(AF_INET, SOCK_STREAM, 0);
@@ -267,6 +267,10 @@ int main(int argc, char* argv[]) {
         int ready = select(max_fd + 1, &read_fds, nullptr, nullptr, timeout_ptr);
         if (ready < 0) {
             std::cerr << "Error in select\n";
+            break;
+        }
+        if(ready == 0) {
+            std::cout << "Timout occurred, no activity detected for " << timeout_seconds << " seconds.\n";
             break;
         }
 
