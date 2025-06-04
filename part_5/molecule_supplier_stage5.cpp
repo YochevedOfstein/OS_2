@@ -101,18 +101,13 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if ((!stream_path.empty() && tcp_port != -1) || (!datagram_path.empty() && udp_port != -1)) {
-        std::cerr << "Error: Cannot mix UDS and TCP/UDP modes simultaneously" << std::endl;
-        exit(1);
-    }
-
-    if (stream_path.empty() && tcp_port == -1) {
-        std::cerr << "Error: Must provide either TCP port or stream path" << std::endl;
+    if (tcp_port == -1 && stream_path.empty() && datagram_path.empty()) {
+        std::cerr << "Error: Must provide at least one mode (--tcp-port, --stream-path, or --datagram-path)" << std::endl;
         print_usage(argv[0]);
     }
 
-    if (datagram_path.empty() && udp_port == -1) {
-        std::cerr << "Error: Must provide either UDP port or datagram path" << std::endl;
+    if ((!stream_path.empty() && tcp_port != -1) || (!datagram_path.empty() && udp_port != -1)) {
+        std::cerr << "Error: Cannot mix UDS and TCP/UDP modes simultaneously" << std::endl;
         print_usage(argv[0]);
     }
 
@@ -124,8 +119,18 @@ int main(int argc, char* argv[]) {
         setup_uds_datagram();
     }
 
-    std::cout << "Server is ready." << std::endl;
-    pause();
+    char buffer[BUFFER_SIZE];
+    while (!datagram_path.empty()) {
+        sockaddr_un client_addr;
+        socklen_t client_len = sizeof(client_addr);
+        memset(buffer, 0, BUFFER_SIZE);
+        ssize_t len = recvfrom(uds_dgram_fd, buffer, BUFFER_SIZE - 1, 0,
+                               (sockaddr*)&client_addr, &client_len);
+        if (len > 0) {
+            buffer[len] = '\0';
+            std::cout << "Received datagram: " << buffer << std::endl;
+        }
+    }
 
     return 0;
 }
