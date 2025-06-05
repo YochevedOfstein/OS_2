@@ -122,13 +122,25 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error sending data to server (TCP)" << "\n";
                 break;
             }
-            for(int i = 0; i < 3; ++i) {
-                std::string line = readTCPLine(tcpsock);
-                if (line.empty()) {
-                    std::cerr << "Server closed TCP connection" << "\n";
+            std::string response = readTCPLine(tcpsock);
+            if (response.empty()) {
+                std::cerr << "Error reading response from server (TCP)" << "\n";
+                goto cleanup;
+            }
+
+            std::cout << response << "\n";
+
+            if(response.rfind("ERROR", 0) == 0) {
+                continue;
+            }
+
+            for(int i = 0; i < 2; ++i) {
+                response = readTCPLine(tcpsock);
+                if (response.empty()) {
+                    std::cerr << "Error reading response from server (TCP)" << "\n";
                     goto cleanup;
                 }
-                std::cout << line << "\n";
+                std::cout << response << "\n";
             }
         }
 
@@ -145,7 +157,7 @@ int main(int argc, char* argv[]) {
                 break;
             }
             buffer[n] = '\0'; // Null-terminate the received data
-            std::cout << "Received from server: " << buffer << "\n";
+            std::cout << "Received from server: " << buffer;
         }
 
     }
