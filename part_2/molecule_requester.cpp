@@ -122,8 +122,28 @@ int main(int argc, char* argv[]) {
                 std::cerr << "Error sending data to server (TCP)" << "\n";
                 break;
             }
-            for(int i = 0; i < 3; ++i) {
-                std::string line = readTCPLine(tcpsock);
+            // for(int i = 0; i < 3; ++i) {
+            //     std::string line = readTCPLine(tcpsock);
+            //     if (line.empty()) {
+            //         std::cerr << "Server closed TCP connection" << "\n";
+            //         goto cleanup;
+            //     }
+            //     std::cout << line << "\n";
+            // }
+
+            std::string line = readTCPLine(tcpsock);
+            if(line.empty()) {
+                std::cerr << "Server closed TCP connection" << "\n";
+                goto cleanup;
+            }
+            std::cout << line << "\n";
+
+            if(line.find("ERROR") != std::string::npos) {
+                continue;
+            }
+
+            for(int i = 0; i < 2; ++i) {
+                line = readTCPLine(tcpsock);
                 if (line.empty()) {
                     std::cerr << "Server closed TCP connection" << "\n";
                     goto cleanup;

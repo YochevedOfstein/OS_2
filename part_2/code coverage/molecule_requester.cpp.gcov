@@ -1,0 +1,183 @@
+        -:    0:Source:molecule_requester.cpp
+        -:    0:Graph:molecule_requester.gcno
+        -:    0:Data:molecule_requester.gcda
+        -:    0:Runs:3
+        -:    1:#include <iostream>
+        -:    2:#include <sstream>
+        -:    3:#include <string>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unistd.h>
+        -:    7:#include <fcntl.h>
+        -:    8:#include <sys/types.h>
+        -:    9:#include <sys/socket.h>
+        -:   10:#include <netdb.h>
+        -:   11:#include <arpa/inet.h>
+        -:   12:
+        -:   13:enum{
+        -:   14:    UDP_BUFFER_SIZE = 1024,
+        -:   15:};
+        -:   16:
+        -:   17:constexpr size_t TCP_BUFFER_SIZE = 1024;
+        -:   18:
+       11:   19:std::string readTCPLine(int fd) {
+       11:   20:    std::string line;
+        -:   21:    char c;
+        -:   22:    while(true) {
+      145:   23:        ssize_t n = recv(fd, &c, 1, 0);
+      145:   24:        if (n <= 0){
+    #####:   25:            return std::string();
+        -:   26:        }
+      145:   27:        if (c == '\n') {
+       11:   28:            break;
+        -:   29:        }
+      134:   30:        line.push_back(c);
+      134:   31:    }
+       11:   32:    return line;
+       11:   33:}
+        -:   34:
+        3:   35:int main(int argc, char* argv[]) {
+        3:   36:    if (argc != 4) {
+        1:   37:        std::cerr << "Usage: " << argv[0] << " <server> <tcp_port> <udp_port>\n";
+        1:   38:        return 1;
+        -:   39:    }
+        2:   40:    const char* server = argv[1];
+        2:   41:    const char* tcp_port = argv[2];
+        2:   42:    const char* udp_port = argv[3];
+        -:   43:
+        -:   44:    // --- TCP setup for ADD commands --- 
+        2:   45:    addrinfo TCPhints{}, *resTCP;
+        2:   46:    TCPhints.ai_family = AF_UNSPEC;
+        2:   47:    TCPhints.ai_socktype = SOCK_STREAM;
+        -:   48:
+        2:   49:    if(getaddrinfo(server, tcp_port, &TCPhints, &resTCP) != 0) {
+    #####:   50:        std::cerr << "Error getting address info (TCP)" << "\n";
+    #####:   51:        return 1;
+        -:   52:    }
+        -:   53:
+        2:   54:    int tcpsock = -1;
+       2*:   55:    for (addrinfo* p = resTCP; p != nullptr; p = p->ai_next) {
+        2:   56:        tcpsock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+       2*:   57:        if (tcpsock < 0) {
+    #####:   58:            continue;
+        -:   59:        }
+        2:   60:        if (connect(tcpsock, p->ai_addr, p->ai_addrlen) == 0) {
+        2:   61:            break;
+        -:   62:        }
+    #####:   63:        close(tcpsock);
+    #####:   64:        tcpsock = -1;
+        -:   65:    }
+        2:   66:    freeaddrinfo(resTCP);
+        2:   67:    if (tcpsock < 0){
+    #####:   68:        std::cerr << "ERROR: Unable to connect TCP socket" << "\n";
+    #####:   69:        return 1;
+        -:   70:    }
+        -:   71:
+        -:   72:    // --- UDP setup for DELIVER commands ---
+        -:   73:
+        2:   74:    addrinfo UDPhints{}, *resUDP;
+        2:   75:    UDPhints.ai_family = AF_UNSPEC;
+        2:   76:    UDPhints.ai_socktype = SOCK_DGRAM;
+        -:   77:
+        2:   78:    if (getaddrinfo(server, udp_port, &UDPhints, &resUDP) != 0) {
+    #####:   79:        std::cerr << "Error getting address info (UDP)\n";
+    #####:   80:        return 1;
+        -:   81:    }
+        -:   82:
+        2:   83:    int udpsock = -1;
+        -:   84:    addrinfo* p;
+       2*:   85:    for (p = resUDP; p != nullptr; p = p->ai_next) {
+        2:   86:        udpsock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+       2*:   87:        if (udpsock < 0) {
+    #####:   88:            continue;
+        -:   89:        }
+        2:   90:        break;
+        -:   91:    }
+        -:   92:
+        2:   93:    if(p == nullptr) {
+    #####:   94:        std::cerr << "Failed creating UDP socket\n";
+    #####:   95:        freeaddrinfo(resUDP);
+    #####:   96:        return 1;
+        -:   97:    }
+        -:   98:
+        2:   99:    std::cout << "Connected to server: " << server << "(TCP:" << tcp_port << ", UDP: " << udp_port << ")\n";
+        2:  100:    std::cout << "Type 'ADD <count>' or 'DELIVER <count>', or QUIT to exit.\n";
+        -:  101:
+        2:  102:    std::string input;
+        -:  103:    sockaddr_storage peer;
+        2:  104:    socklen_t peer_len = sizeof(peer);
+        -:  105:
+        -:  106:    while (true) {
+       11:  107:        std::cout << "> ";
+       11:  108:        if(!std::getline(std::cin, input) || input == "QUIT") {
+        2:  109:            break;
+        -:  110:        }
+       9*:  111:        if (input.empty()) {
+    #####:  112:            continue;
+        -:  113:        }
+        9:  114:        if (input.back() != '\n') {
+        9:  115:            input.push_back('\n');
+        -:  116:        }
+        -:  117:
+        9:  118:        bool is_add_command = input.rfind("ADD ", 0) == 0;
+        -:  119:
+        9:  120:        if(is_add_command) {
+        5:  121:            if (send(tcpsock, input.c_str(), input.size(), 0) < 0) {
+    #####:  122:                std::cerr << "Error sending data to server (TCP)" << "\n";
+    #####:  123:                break;
+        -:  124:            }
+        -:  125:            // for(int i = 0; i < 3; ++i) {
+        -:  126:            //     std::string line = readTCPLine(tcpsock);
+        -:  127:            //     if (line.empty()) {
+        -:  128:            //         std::cerr << "Server closed TCP connection" << "\n";
+        -:  129:            //         goto cleanup;
+        -:  130:            //     }
+        -:  131:            //     std::cout << line << "\n";
+        -:  132:            // }
+        -:  133:
+        5:  134:            std::string line = readTCPLine(tcpsock);
+        5:  135:            if(line.empty()) {
+    #####:  136:                std::cerr << "Server closed TCP connection" << "\n";
+    #####:  137:                goto cleanup;
+        -:  138:            }
+        5:  139:            std::cout << line << "\n";
+        -:  140:
+        5:  141:            if(line.find("ERROR") != std::string::npos) {
+        2:  142:                continue;
+        -:  143:            }
+        -:  144:
+        9:  145:            for(int i = 0; i < 2; ++i) {
+        6:  146:                line = readTCPLine(tcpsock);
+        6:  147:                if (line.empty()) {
+    #####:  148:                    std::cerr << "Server closed TCP connection" << "\n";
+    #####:  149:                    goto cleanup;
+        -:  150:                }
+        6:  151:                std::cout << line << "\n";
+        -:  152:            }
+        5:  153:        }
+        -:  154:
+        -:  155:        else{
+        4:  156:            ssize_t sent = sendto(udpsock, input.c_str(), input.size(), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+        4:  157:            if (sent < 0) {
+    #####:  158:                std::cerr << "Error sending data" << "\n";
+    #####:  159:                break;
+        -:  160:            }
+        -:  161:            char buffer[UDP_BUFFER_SIZE];
+        4:  162:            ssize_t n = recvfrom(udpsock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&peer, &peer_len);
+        4:  163:            if (n < 0) {
+    #####:  164:                std::cerr << "Error receiving data" << "\n";
+    #####:  165:                break;
+        -:  166:            }
+        4:  167:            buffer[n] = '\0'; // Null-terminate the received data
+        4:  168:            std::cout << "Received from server: " << buffer << "\n";
+        -:  169:        }
+        -:  170:
+        9:  171:    }
+        2:  172:    cleanup:
+        2:  173:        freeaddrinfo(resUDP);
+        2:  174:        close(tcpsock);
+        2:  175:        close(udpsock);
+        2:  176:        std::cout << "Disconnected from server\n";
+        2:  177:        return 0;
+        -:  178:
+        2:  179:}
