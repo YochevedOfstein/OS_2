@@ -1,0 +1,109 @@
+        -:    0:Source:atom_supplier.cpp
+        -:    0:Graph:atom_supplier.gcno
+        -:    0:Data:atom_supplier.gcda
+        -:    0:Runs:3
+        -:    1:#include <iostream>
+        -:    2:#include <sstream>
+        -:    3:#include <string>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unistd.h>
+        -:    7:#include <fcntl.h>
+        -:    8:#include <sys/types.h>
+        -:    9:#include <sys/socket.h>
+        -:   10:#include <netdb.h>
+        -:   11:#include <arpa/inet.h>
+        -:   12:
+        -:   13:
+        -:   14:
+       17:   15:std::string readLine(int fd) {
+       17:   16:    std::string line;
+        -:   17:    char c;
+        -:   18:    while(true) {
+      261:   19:        ssize_t n = recv(fd, &c, 1, 0);
+      261:   20:        if (n <= 0){
+    #####:   21:            return std::string();
+        -:   22:        }
+      261:   23:        if (c == '\n') {
+       17:   24:            break;
+        -:   25:        }
+      244:   26:        line.push_back(c);
+      244:   27:    }
+       17:   28:    return line;
+       17:   29:}
+        -:   30:
+        3:   31:int main(int argc, char* argv[]) {
+        3:   32:    if (argc != 3) {
+    #####:   33:        std::cerr << "Usage: " << argv[0] << " <server> <port>" << "\n";
+    #####:   34:        return 1;
+        -:   35:    }
+        3:   36:    const char* server = argv[1];
+        3:   37:    const char* port = argv[2];
+        -:   38:
+        3:   39:    addrinfo hints{}, *res;
+        3:   40:    hints.ai_family = AF_UNSPEC;
+        3:   41:    hints.ai_socktype = SOCK_STREAM;
+        -:   42:
+        3:   43:    if(getaddrinfo(server, port, &hints, &res) != 0) {
+    #####:   44:        std::cerr << "Error getting address info" << "\n";
+    #####:   45:        return 1;
+        -:   46:    }
+        -:   47:
+        3:   48:    int sock = -1;
+       3*:   49:    for (addrinfo* p = res; p != nullptr; p = p->ai_next) {
+        3:   50:        sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+       3*:   51:        if (sock < 0) {
+    #####:   52:            continue;
+        -:   53:        }
+        3:   54:        if (connect(sock, p->ai_addr, p->ai_addrlen) == 0) {
+        3:   55:            break;
+        -:   56:        }
+    #####:   57:        close(sock);
+    #####:   58:        sock = -1;
+        -:   59:    }
+        3:   60:    freeaddrinfo(res);
+        3:   61:    if (sock < 0){
+    #####:   62:        std::cerr << "ERROR: Unable to connect" << "\n";
+    #####:   63:        return 1;
+        -:   64:    }
+        3:   65:    std::cout << "Connected to server" << server << ":" << port << "\n";
+        3:   66:    std::cout << "Type ADD CARBON|OXYGEN|HYDROGEN <number> to request atoms, or QUIT to exit\n";
+        -:   67:
+        3:   68:    std::string input;
+        -:   69:    while (true) {
+       12:   70:        std::cout << "> ";
+       12:   71:        std::getline(std::cin, input);
+       12:   72:        if (input == "QUIT") {
+        3:   73:            break;
+        -:   74:        }
+        9:   75:        if(input.back() != '\n') {
+        9:   76:            input.push_back('\n');
+        -:   77:        }
+        9:   78:        if(send(sock, input.c_str(), input.size(), 0) < 0) {
+    #####:   79:            std::cerr << "Error sending data to server" << "\n";
+    #####:   80:            break;
+        -:   81:        }
+        -:   82:
+        9:   83:        std::string line1 = readLine(sock);
+        9:   84:        if (line1.empty()) {
+    #####:   85:            std::cerr << "Server disconnected" << "\n";
+    #####:   86:            break;
+        -:   87:        }
+        9:   88:        std::cout << line1 << "\n";
+        -:   89:
+        9:   90:        if(line1.rfind("CARBON", 0) == 0){
+        4:   91:            std::string line2 = readLine(sock);
+        4:   92:            std::string line3 = readLine(sock);
+        4:   93:            if(!line2.empty()) {
+        4:   94:                std::cout << line2 << "\n";
+        -:   95:            }
+        4:   96:            if(!line3.empty()) {
+        4:   97:                std::cout << line3 << "\n";
+        -:   98:            }
+        4:   99:        }
+        -:  100:
+       18:  101:    }
+        3:  102:    close(sock);
+        3:  103:    std::cout << "Disconnected from server\n";
+        3:  104:    return 0;
+        3:  105:    }

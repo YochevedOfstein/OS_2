@@ -1,0 +1,182 @@
+        -:    0:Source:atom_warehouse.cpp
+        -:    0:Graph:atom_warehouse.gcno
+        -:    0:Data:atom_warehouse.gcda
+        -:    0:Runs:7
+        -:    1:#include <iostream>
+        -:    2:#include <sstream>
+        -:    3:#include <string>
+        -:    4:#include <vector>
+        -:    5:#include <map>
+        -:    6:#include <cstring>
+        -:    7:#include <cstdlib>
+        -:    8:#include <unistd.h>
+        -:    9:#include <fcntl.h>
+        -:   10:#include <sys/types.h>
+        -:   11:#include <sys/socket.h>
+        -:   12:#include <netinet/in.h>
+        -:   13:#include <arpa/inet.h>
+        -:   14:#include <signal.h>
+        -:   15:
+        -:   16:
+        -:   17:// Buffer size for reading commands
+        -:   18:constexpr size_t READ_BUFFER = 1024;
+        -:   19:// Maximum atoms (10^18)
+        -:   20:constexpr unsigned long long MAX_ATOMS = 1000000000000000000ULL;
+        -:   21:
+        -:   22:static volatile sig_atomic_t keep_running = 1;
+        -:   23:
+        7:   24:int setNonBlocking(int fd) {
+        7:   25:    int flags = fcntl(fd, F_GETFL, 0);
+       7*:   26:    if (flags == -1) return -1;
+        7:   27:    return fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+        -:   28:}
+        -:   29:
+        4:   30:void sendStatus(int client_fd, unsigned long long carbon, unsigned long long hydrogen, unsigned long long oxygen) {
+        4:   31:    std::ostringstream oss;
+        4:   32:    oss << "CARBON: " << carbon << "\n" <<"OXYGEN: " << oxygen << "\n" << "HYDROGEN: " << hydrogen << "\n";
+        4:   33:    std::string response = oss.str();
+        4:   34:    send(client_fd, response.c_str(), response.size(), 0);
+        4:   35:}
+        -:   36:
+        9:   37:void processCommand(int client_fd, const std::string& command, unsigned long long& carbon, unsigned long long& hydrogen, unsigned long long& oxygen) {
+        9:   38:    std::istringstream iss(command);
+        9:   39:    std::string cmd, type;
+        -:   40:    unsigned long long amount;
+        -:   41:
+        9:   42:    if(!(iss >> cmd >> type >> amount) || cmd != "ADD" || amount > MAX_ATOMS) {
+        3:   43:        const char* err = "ERROR: Invalid command\n";
+        3:   44:        send(client_fd, err, strlen(err), 0);
+        3:   45:        return;
+        -:   46:    }
+        -:   47:
+        6:   48:    unsigned long long *counter = nullptr;
+        6:   49:    if (type == "CARBON") {
+        3:   50:        counter = &carbon;
+        3:   51:    } else if (type == "HYDROGEN") {
+        1:   52:        counter = &hydrogen;
+        2:   53:    } else if (type == "OXYGEN") {
+        1:   54:        counter = &oxygen;
+        -:   55:    } else {
+        1:   56:        const char* err = "ERROR: Unknown atom type\n";
+        1:   57:        send(client_fd, err, strlen(err), 0);
+        1:   58:        return;
+        -:   59:    }
+        -:   60:
+        5:   61:    if (*counter + amount > MAX_ATOMS || *counter + amount < *counter) {
+        1:   62:        const char* err = "ERROR: Overflow error\n";
+        1:   63:        send(client_fd, err, strlen(err), 0);
+        1:   64:        return;
+        -:   65:    }
+        -:   66:
+        4:   67:    *counter += amount;
+        4:   68:    sendStatus(client_fd, carbon, hydrogen, oxygen);
+       19:   69:}
+        -:   70:
+        4:   71:void signalHandler(int) {
+        4:   72:    keep_running = 0;
+        4:   73:}
+        -:   74:
+        7:   75:int main(int argc, char* argv[]) {
+        7:   76:    if (argc != 2) {
+        1:   77:        std::cerr << "Usage: " << argv[0] << " <port>" << "\n";
+        1:   78:        return 1;
+        -:   79:    }
+        -:   80:
+        6:   81:    signal(SIGINT, signalHandler);
+        -:   82:    
+        6:   83:    int port = std::stoi(argv[1]);
+        6:   84:    int listener = socket(AF_INET, SOCK_STREAM, 0);
+        6:   85:    if (listener < 0) {
+    #####:   86:        std::cerr << "Error creating socket" << "\n";
+    #####:   87:        return 1;
+        -:   88:    }
+        -:   89:
+        6:   90:    int opt = 1;
+        6:   91:    setsockopt(listener, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+        -:   92:
+        6:   93:    sockaddr_in serv_addr{};
+        6:   94:    serv_addr.sin_family = AF_INET;
+        6:   95:    serv_addr.sin_addr.s_addr = INADDR_ANY;
+        6:   96:    serv_addr.sin_port = htons(port);
+        -:   97:
+        6:   98:    if (bind(listener, (sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+        2:   99:        std::cerr << "Error binding socket" << "\n";
+        2:  100:        close(listener);
+        2:  101:        return 1;
+        -:  102:    }
+        4:  103:    if (listen(listener, SOMAXCONN) < 0) {
+    #####:  104:        std::cerr << "Error listening on socket" << "\n";
+    #####:  105:        close(listener);
+    #####:  106:        return 1;
+        -:  107:    }
+        -:  108:
+        4:  109:    setNonBlocking(listener);
+        4:  110:    std::vector<int> clients;
+        4:  111:    std::map<int, std::string> recv_buffer;
+        -:  112:
+        4:  113:    unsigned long long carbon = 0, hydrogen = 0, oxygen = 0;
+        -:  114:
+        4:  115:    std::cout << "warehouse_atom started on port " << port << "\n";
+        -:  116:
+       19:  117:    while(keep_running) {
+        -:  118:        fd_set read_fds;
+      323:  119:        FD_ZERO(&read_fds);
+       19:  120:        FD_SET(listener, &read_fds);
+       19:  121:        int max_fd = listener;
+        -:  122:
+       31:  123:        for (int client_fd : clients) {
+       12:  124:            FD_SET(client_fd, &read_fds);
+       12:  125:            if (client_fd > max_fd) {
+       12:  126:                max_fd = client_fd;
+        -:  127:            }
+        -:  128:        }
+        -:  129:
+       19:  130:        if (select(max_fd + 1, &read_fds, nullptr, nullptr, nullptr) < 0) {
+        4:  131:            std::cerr << "Error in select" << "\n";
+        4:  132:            break;
+        -:  133:        }
+        -:  134:
+       15:  135:        if (FD_ISSET(listener, &read_fds)) {
+        3:  136:            sockaddr_in cli_addr{};
+        3:  137:            socklen_t cli_len = sizeof(cli_addr);
+        3:  138:            int client_fd = accept(listener, (sockaddr*)&cli_addr, &cli_len);
+       3*:  139:            if (client_fd < 0) {
+    #####:  140:                std::cerr << "Error accepting connection" << "\n";
+    #####:  141:                continue;
+        -:  142:            }
+        3:  143:            setNonBlocking(client_fd);
+        3:  144:            clients.push_back(client_fd);
+        3:  145:            std::cout << "New connection from " << inet_ntoa(cli_addr.sin_addr) << ":" << ntohs(cli_addr.sin_port) << "\n";
+        -:  146:        }
+        -:  147:
+       30:  148:        for (auto it = clients.begin(); it != clients.end();) {
+       15:  149:            int client_fd = *it;
+       15:  150:            if (FD_ISSET(client_fd, &read_fds)) {
+        -:  151:                char buffer[READ_BUFFER];
+       12:  152:                ssize_t bytes_read = recv(client_fd, buffer, sizeof(buffer), 0);
+       12:  153:                if (bytes_read <= 0) {
+        3:  154:                    close(client_fd);
+        3:  155:                    it = clients.erase(it);
+        3:  156:                    std::cout << "Client disconnected\n";
+        -:  157:                } else {
+        9:  158:                    recv_buffer[client_fd].append(buffer, bytes_read);
+        -:  159:                    size_t pos;
+       18:  160:                    while ((pos = recv_buffer[client_fd].find('\n')) != std::string::npos) {
+        9:  161:                        std::string command = recv_buffer[client_fd].substr(0, pos);
+        9:  162:                        recv_buffer[client_fd].erase(0, pos + 1);
+        9:  163:                        processCommand(client_fd, command, carbon, hydrogen, oxygen);
+        9:  164:                    }
+        9:  165:                    ++it;
+        -:  166:                }
+        -:  167:            } else {
+        3:  168:                ++it;
+        -:  169:            }
+        -:  170:        }
+        -:  171:    }
+        -:  172:
+       4*:  173:    for (int client_fd : clients) {
+    #####:  174:        close(client_fd);
+        -:  175:    }
+        4:  176:    close(listener);
+        4:  177:    return 0;
+        4:  178:}

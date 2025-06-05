@@ -11,12 +11,15 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
 
 // Buffer size for reading commands
 constexpr size_t READ_BUFFER = 1024;
 // Maximum atoms (10^18)
 constexpr unsigned long long MAX_ATOMS = 1000000000000000000ULL;
+
+static volatile sig_atomic_t keep_running = 1;
 
 int setNonBlocking(int fd) {
     int flags = fcntl(fd, F_GETFL, 0);
@@ -65,11 +68,17 @@ void processCommand(int client_fd, const std::string& command, unsigned long lon
     sendStatus(client_fd, carbon, hydrogen, oxygen);
 }
 
+void signalHandler(int) {
+    keep_running = 0;
+}
+
 int main(int argc, char* argv[]) {
     if (argc != 2) {
         std::cerr << "Usage: " << argv[0] << " <port>" << "\n";
         return 1;
     }
+
+    signal(SIGINT, signalHandler);
     
     int port = std::stoi(argv[1]);
     int listener = socket(AF_INET, SOCK_STREAM, 0);
@@ -105,7 +114,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "warehouse_atom started on port " << port << "\n";
 
-    while(true) {
+    while(keep_running) {
         fd_set read_fds;
         FD_ZERO(&read_fds);
         FD_SET(listener, &read_fds);

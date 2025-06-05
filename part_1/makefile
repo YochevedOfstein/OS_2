@@ -1,14 +1,15 @@
 CXX = g++  
-CXXFLAGS = -std=c++11 -Wall -Wextra -O2 -fprofile-arcs -ftest-coverage -O0
+CXXFLAGS = -std=c++11 -Wall -Wextra -fprofile-arcs -ftest-coverage -O0
+LDFLAGS = -lgcov
 TARGETS = atom_warehouse atom_supplier
 
 all: $(TARGETS)
 
 atom_warehouse: atom_warehouse.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
 atom_supplier: atom_supplier.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
 clean:
 	rm -f $(TARGETS) *.gcda *.gcno *.gcov
