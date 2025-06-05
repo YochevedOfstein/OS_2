@@ -3,115 +3,141 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
-#include <set>
-#include <unistd.h>
-#include <fcntl.h>
+#include <string>
 #include <cstring>
-#include <sys/socket.h>
+#include <cstdlib>
+#include <unistd.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
 #include <sys/un.h>
-#include <arpa/inet.h>
 
 using namespace std;
 
-unordered_map<string, multiset<string>> atom_inventory;
+unordered_map<string, int> atom_inventory;
+string save_file_path = "";
 
-void load_atoms(const string& folder) {
-    vector<string> types = {"hydrogen", "oxygen", "carbon"};
-    for (const string& type : types) {
-        ifstream infile(folder + "/" + type + ".txt");
+void load_inventory_from_file(const string& path) {
+    ifstream infile(path);
+    if (!infile.is_open()) return;
+    string line;
+    while (getline(infile, line)) {
+        istringstream iss(line);
         string atom;
-        while (getline(infile, atom)) {
-            atom_inventory[type].insert(atom);
+        int count;
+        if (iss >> atom >> count) {
+            atom_inventory[atom] = count;
         }
     }
+    infile.close();
 }
 
-bool can_build_molecule(const vector<string>& atoms) {
-    unordered_map<string, int> required;
-    for (const string& atom : atoms) {
-        required[atom]++;
+void save_inventory_to_file(const string& path) {
+    ofstream outfile(path);
+    for (const auto& [atom, count] : atom_inventory) {
+        outfile << atom << " " << count << "\n";
     }
+    outfile.close();
+}
 
-    for (const auto& [type, count] : required) {
-        if (atom_inventory[type].size() < count) return false;
+bool handle_request(const string& request, string& response) {
+    istringstream ss(request);
+    string atom;
+    vector<string> atoms;
+    while (getline(ss, atom, ',')) {
+        atoms.push_back(atom);
     }
-
-    for (const auto& [type, count] : required) {
-        for (int i = 0; i < count; ++i) atom_inventory[type].erase(atom_inventory[type].begin());
+    for (const auto& a : atoms) {
+        if (atom_inventory[a] <= 0) {
+            response = "FAILURE";
+            return false;
+        }
     }
+    for (const auto& a : atoms) {
+        atom_inventory[a]--;
+    }
+    if (!save_file_path.empty()) {
+        save_inventory_to_file(save_file_path);
+    }
+    response = "SUCCESS";
     return true;
 }
 
-vector<string> parse_atoms(const string& input) {
-    vector<string> atoms;
-    stringstream ss(input);
-    string atom;
-    while (getline(ss, atom, ',')) atoms.push_back(atom);
-    return atoms;
-}
+void start_udp_server(int port) {
+    int sock = socket(AF_INET, SOCK_DGRAM, 0);
+    sockaddr_in server{}, client{};
+    socklen_t len = sizeof(client);
 
-void serve_udp(int udp_port) {
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    sockaddr_in serv_addr{}, cli_addr{};
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = INADDR_ANY;
-    serv_addr.sin_port = htons(udp_port);
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(port);
 
-    bind(sockfd, (sockaddr*)&serv_addr, sizeof(serv_addr));
+    bind(sock, (sockaddr*)&server, sizeof(server));
+
     char buffer[1024];
-
     while (true) {
-        socklen_t len = sizeof(cli_addr);
-        int n = recvfrom(sockfd, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&cli_addr, &len);
-        buffer[n] = '\0';
-        vector<string> atoms = parse_atoms(buffer);
-        string response = can_build_molecule(atoms) ? "SUCCESS" : "FAILURE";
-        sendto(sockfd, response.c_str(), response.size(), 0, (sockaddr*)&cli_addr, len);
+        memset(buffer, 0, sizeof(buffer));
+        recvfrom(sock, buffer, sizeof(buffer), 0, (sockaddr*)&client, &len);
+        string request(buffer);
+        string response;
+        handle_request(request, response);
+        sendto(sock, response.c_str(), response.size(), 0, (sockaddr*)&client, len);
     }
 }
 
-void serve_uds(const string& path) {
-    int sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
-    sockaddr_un serv_addr{}, cli_addr{};
+void start_uds_server(const string& path) {
+    int sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+    sockaddr_un server{}, client{};
+    socklen_t len = sizeof(client);
 
-    serv_addr.sun_family = AF_UNIX;
-    strcpy(serv_addr.sun_path, path.c_str());
+    server.sun_family = AF_UNIX;
+    strncpy(server.sun_path, path.c_str(), sizeof(server.sun_path)-1);
     unlink(path.c_str());
-    bind(sockfd, (sockaddr*)&serv_addr, sizeof(serv_addr));
-    char buffer[1024];
 
+    bind(sock, (sockaddr*)&server, sizeof(server));
+
+    char buffer[1024];
     while (true) {
-        socklen_t len = sizeof(cli_addr);
-        int n = recvfrom(sockfd, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&cli_addr, &len);
-        buffer[n] = '\0';
-        vector<string> atoms = parse_atoms(buffer);
-        string response = can_build_molecule(atoms) ? "SUCCESS" : "FAILURE";
-        sendto(sockfd, response.c_str(), response.size(), 0, (sockaddr*)&cli_addr, len);
+        memset(buffer, 0, sizeof(buffer));
+        recvfrom(sock, buffer, sizeof(buffer), 0, (sockaddr*)&client, &len);
+        string request(buffer);
+        string response;
+        handle_request(request, response);
+        sendto(sock, response.c_str(), response.size(), 0, (sockaddr*)&client, len);
     }
 }
 
 int main(int argc, char* argv[]) {
     int udp_port = -1;
-    string datagram_path;
-    string atom_dir = "atom_types";
+    string uds_path;
 
     for (int i = 1; i < argc; ++i) {
-        if (strcmp(argv[i], "--udp-port") == 0 && i + 1 < argc) udp_port = atoi(argv[++i]);
-        else if (strcmp(argv[i], "--datagram-path") == 0 && i + 1 < argc) datagram_path = argv[++i];
+        if (string(argv[i]) == "--udp-port" && i+1 < argc) {
+            udp_port = atoi(argv[++i]);
+        } else if (string(argv[i]) == "--datagram-path" && i+1 < argc) {
+            uds_path = argv[++i];
+        } else if (string(argv[i]) == "--save-file" && i+1 < argc) {
+            save_file_path = argv[++i];
+        }
     }
 
-    if (udp_port == -1 && datagram_path.empty()) {
-        cerr << "Usage: " << argv[0] << " --udp-port <port> | --datagram-path <path>" << endl;
+    if (!save_file_path.empty()) {
+        load_inventory_from_file(save_file_path);
+    }
+
+    if (udp_port != -1 && !uds_path.empty()) {
+        cerr << "Error: Cannot mix UDS and UDP modes simultaneously" << endl;
         return 1;
     }
 
-    load_atoms(atom_dir);
+    if (udp_port == -1 && uds_path.empty()) {
+        cerr << "Error: Must provide either UDP port or UDS path" << endl;
+        return 1;
+    }
 
     if (udp_port != -1) {
-        serve_udp(udp_port);
+        start_udp_server(udp_port);
     } else {
-        serve_uds(datagram_path);
+        start_uds_server(uds_path);
     }
 
     return 0;
