@@ -119,16 +119,37 @@ int main(int argc, char* argv[]) {
         setup_uds_datagram();
     }
 
-    char buffer[BUFFER_SIZE];
-    while (!datagram_path.empty()) {
-        sockaddr_un client_addr;
-        socklen_t client_len = sizeof(client_addr);
-        memset(buffer, 0, BUFFER_SIZE);
-        ssize_t len = recvfrom(uds_dgram_fd, buffer, BUFFER_SIZE - 1, 0,
-                               (sockaddr*)&client_addr, &client_len);
-        if (len > 0) {
-            buffer[len] = '\0';
-            std::cout << "Received datagram: " << buffer << std::endl;
+    if (!datagram_path.empty()) {
+        char buffer[BUFFER_SIZE];
+        while (true) {
+            sockaddr_un client_addr;
+            socklen_t client_len = sizeof(client_addr);
+            memset(buffer, 0, BUFFER_SIZE);
+            ssize_t len = recvfrom(uds_dgram_fd, buffer, BUFFER_SIZE - 1, 0,
+                                   (sockaddr*)&client_addr, &client_len);
+            if (len > 0) {
+                buffer[len] = '\0';
+                std::cout << "Received datagram: " << buffer << std::endl;
+            }
+        }
+    }
+
+    if (!stream_path.empty()) {
+        while (true) {
+            int client_fd = accept(uds_stream_fd, nullptr, nullptr);
+            if (client_fd == -1) {
+                perror("accept");
+                continue;
+            }
+
+            char buffer[BUFFER_SIZE];
+            ssize_t len = read(client_fd, buffer, sizeof(buffer) - 1);
+            if (len > 0) {
+                buffer[len] = '\0';
+                std::cout << "Received stream: " << buffer << std::endl;
+            }
+
+            close(client_fd);
         }
     }
 
