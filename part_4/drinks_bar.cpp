@@ -16,9 +16,12 @@
 #include <algorithm>
 #include <getopt.h>
 #include <sys/time.h>
+#include <signal.h>
 
 constexpr size_t READ_BUFFER = 1024;
 constexpr unsigned long long MAX_ATOMS = 1000000000000000000ULL;
+
+static volatile sig_atomic_t keep_running = 1;
 
 // Map molecule name to its atom requirements: {C, H, O}
 const std::map<std::string, std::array<unsigned long long,3>> molecule_req = {
@@ -140,11 +143,17 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
     }
 }
 
+void signalHandler(int) {
+    keep_running = 0;
+}
+
 int main(int argc, char* argv[]) {
 
     unsigned long long initcarbon = 0, initoxygen = 0, inithydrogen = 0;
     int timeout_seconds = -1;
     int tcp_port = -1, udp_port = -1;
+
+    signal(SIGINT, signalHandler);
 
     static struct option long_options[] = {
         {"oxygen", required_argument, nullptr, 'o'},
@@ -238,7 +247,7 @@ int main(int argc, char* argv[]) {
     std::map<int, std::string> recv_buffer;
 
     fd_set read_fds;
-    while (true) {
+    while (keep_running) {
         FD_ZERO(&read_fds);
         FD_SET(STDIN_FILENO, &read_fds);
         FD_SET(listener, &read_fds);

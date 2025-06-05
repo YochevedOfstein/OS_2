@@ -1,0 +1,128 @@
+        -:    0:Source:atom_supplier.cpp
+        -:    0:Graph:atom_supplier.gcno
+        -:    0:Data:atom_supplier.gcda
+        -:    0:Runs:1
+        -:    1:#include <iostream>
+        -:    2:#include <sstream>
+        -:    3:#include <string>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unistd.h>
+        -:    7:#include <fcntl.h>
+        -:    8:#include <sys/types.h>
+        -:    9:#include <sys/socket.h>
+        -:   10:#include <netdb.h>
+        -:   11:#include <arpa/inet.h>
+        -:   12:#include <unistd.h>
+        -:   13:
+        -:   14:
+        -:   15:constexpr size_t TCP_BUFFER_SIZE = 1024;
+        -:   16:
+        -:   17:
+        6:   18:std::string readLine(int fd) {
+        6:   19:    std::string line;
+        -:   20:    char c;
+        -:   21:    while(true) {
+      104:   22:        ssize_t n = recv(fd, &c, 1, 0);
+      104:   23:        if (n <= 0){
+    #####:   24:            return std::string();
+        -:   25:        }
+      104:   26:        if (c == '\n') {
+        6:   27:            break;
+        -:   28:        }
+       98:   29:        line.push_back(c);
+       98:   30:    }
+        6:   31:    return line;
+        6:   32:}
+        -:   33:
+        1:   34:int main(int argc, char* argv[]) {
+        1:   35:    const char* host = nullptr;
+        1:   36:    const char* port = nullptr;
+        -:   37:    int opt;
+        -:   38:
+        3:   39:    while ((opt = getopt(argc, argv, "h:p:")) != -1) {
+        2:   40:        switch (opt) {
+        1:   41:            case 'h':
+        1:   42:                host = optarg;
+        1:   43:                break;
+        1:   44:            case 'p':
+        1:   45:                port = optarg;
+        1:   46:                break;
+    #####:   47:            default:
+    #####:   48:                std::cerr << "Usage: " << argv[0] << " -h <hostname/IP> -p <port>\n";
+    #####:   49:                return 1;
+        -:   50:        }
+        -:   51:    }
+        -:   52:
+        1:   53:    if (host == nullptr || port == nullptr) {
+    #####:   54:        std::cerr << "ERROR: Hostname/IP and port must be specified\n";
+    #####:   55:        return 1;
+        -:   56:    }
+        -:   57:
+        1:   58:    addrinfo hints{}, *res;
+        1:   59:    hints.ai_family = AF_UNSPEC;
+        1:   60:    hints.ai_socktype = SOCK_STREAM;
+        -:   61:
+        1:   62:    if(getaddrinfo(host, port, &hints, &res) != 0) {
+    #####:   63:        std::cerr << "Error getting address info (TCP)" << "\n";
+    #####:   64:        return 1;
+        -:   65:    }
+        -:   66:
+        1:   67:    int sock = -1;
+       1*:   68:    for (addrinfo* p = res; p != nullptr; p = p->ai_next) {
+        1:   69:        sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+       1*:   70:        if (sock < 0) {
+    #####:   71:            continue;
+        -:   72:        }
+        1:   73:        if (connect(sock, p->ai_addr, p->ai_addrlen) == 0) {
+        1:   74:            break;
+        -:   75:        }
+    #####:   76:        close(sock);
+    #####:   77:        sock = -1;
+        -:   78:    }
+        1:   79:    freeaddrinfo(res);
+        1:   80:    if (sock < 0){
+    #####:   81:        std::cerr << "ERROR: Unable to connect" << "\n";
+    #####:   82:        return 1;
+        -:   83:    }
+        1:   84:    std::cout << "Connected to server" << host << "TCP port:" << port << "\n";
+        1:   85:    std::cout << "Type ADD CARBON|OXYGEN|HYDROGEN <number> to request atoms, or QUIT to exit\n";
+        -:   86:
+        1:   87:    std::string input;
+        -:   88:    while (true) {
+        5:   89:        std::cout << "> ";
+        5:   90:        std::getline(std::cin, input);
+        5:   91:        if (input == "QUIT") {
+        1:   92:            break;
+        -:   93:        }
+        4:   94:        if(input.back() != '\n') {
+        4:   95:            input.push_back('\n');
+        -:   96:        }
+        4:   97:        if(send(sock, input.c_str(), input.size(), 0) < 0) {
+    #####:   98:            std::cerr << "Error sending data to server" << "\n";
+    #####:   99:            break;
+        -:  100:        }
+        -:  101:
+        4:  102:        std::string line1 = readLine(sock);
+        4:  103:        if (line1.empty()) {
+    #####:  104:            std::cerr << "Server disconnected" << "\n";
+    #####:  105:            break;
+        -:  106:        }
+        4:  107:        std::cout << line1 << "\n";
+        -:  108:
+        4:  109:        if(line1.rfind("CARBON", 0) == 0){
+        1:  110:            std::string line2 = readLine(sock);
+        1:  111:            std::string line3 = readLine(sock);
+        1:  112:            if(!line2.empty()) {
+        1:  113:                std::cout << line2 << "\n";
+        -:  114:            }
+        1:  115:            if(!line3.empty()) {
+        1:  116:                std::cout << line3 << "\n";
+        -:  117:            }
+        1:  118:        }
+        -:  119:
+        8:  120:    }
+        1:  121:    close(sock);
+        1:  122:    std::cout << "Disconnected from server\n";
+        1:  123:    return 0;
+        -:  124:    }

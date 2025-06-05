@@ -1,7 +1,7 @@
         -:    0:Source:molecule_requester.cpp
         -:    0:Graph:molecule_requester.gcno
         -:    0:Data:molecule_requester.gcda
-        -:    0:Runs:2
+        -:    0:Runs:4
         -:    1:#include <iostream>
         -:    2:#include <sstream>
         -:    3:#include <string>
@@ -20,26 +20,26 @@
         -:   16:
         -:   17:constexpr size_t TCP_BUFFER_SIZE = 1024;
         -:   18:
-       10:   19:std::string readTCPLine(int fd) {
-       10:   20:    std::string line;
+       11:   19:std::string readTCPLine(int fd) {
+       11:   20:    std::string line;
         -:   21:    char c;
         -:   22:    while(true) {
-      119:   23:        ssize_t n = recv(fd, &c, 1, 0);
-      119:   24:        if (n <= 0){
+      195:   23:        ssize_t n = recv(fd, &c, 1, 0);
+      195:   24:        if (n <= 0){
     #####:   25:            return std::string();
         -:   26:        }
-      119:   27:        if (c == '\n') {
-       10:   28:            break;
+      195:   27:        if (c == '\n') {
+       11:   28:            break;
         -:   29:        }
-      109:   30:        line.push_back(c);
-      109:   31:    }
-       10:   32:    return line;
-       10:   33:}
+      184:   30:        line.push_back(c);
+      184:   31:    }
+       11:   32:    return line;
+       11:   33:}
         -:   34:
-        2:   35:int main(int argc, char* argv[]) {
-        2:   36:    if (argc != 4) {
-        1:   37:        std::cerr << "Usage: " << argv[0] << " <server> <tcp_port> <udp_port>\n";
-        1:   38:        return 1;
+        4:   35:int main(int argc, char* argv[]) {
+        4:   36:    if (argc != 4) {
+        3:   37:        std::cerr << "Usage: " << argv[0] << " <server> <tcp_port> <udp_port>\n";
+        3:   38:        return 1;
         -:   39:    }
         1:   40:    const char* server = argv[1];
         1:   41:    const char* tcp_port = argv[2];
@@ -122,20 +122,20 @@
         8:  118:        bool is_add_command = input.rfind("ADD ", 0) == 0;
         -:  119:
         8:  120:        if(is_add_command) {
-        4:  121:            if (send(tcpsock, input.c_str(), input.size(), 0) < 0) {
+        5:  121:            if (send(tcpsock, input.c_str(), input.size(), 0) < 0) {
     #####:  122:                std::cerr << "Error sending data to server (TCP)" << "\n";
     #####:  123:                break;
         -:  124:            }
-        4:  125:            std::string response = readTCPLine(tcpsock);
-        4:  126:            if (response.empty()) {
+        5:  125:            std::string response = readTCPLine(tcpsock);
+        5:  126:            if (response.empty()) {
     #####:  127:                std::cerr << "Error reading response from server (TCP)" << "\n";
     #####:  128:                goto cleanup;
         -:  129:            }
         -:  130:
-        4:  131:            std::cout << response << "\n";
+        5:  131:            std::cout << response << "\n";
         -:  132:
-        4:  133:            if(response.rfind("ERROR", 0) == 0) {
-        1:  134:                continue;
+        5:  133:            if(response.rfind("ERROR", 0) == 0) {
+        2:  134:                continue;
         -:  135:            }
         -:  136:
         9:  137:            for(int i = 0; i < 2; ++i) {
@@ -146,22 +146,22 @@
         -:  142:                }
         6:  143:                std::cout << response << "\n";
         -:  144:            }
-        4:  145:        }
+        5:  145:        }
         -:  146:
         -:  147:        else{
-        4:  148:            ssize_t sent = sendto(udpsock, input.c_str(), input.size(), 0, resUDP->ai_addr, resUDP->ai_addrlen);
-        4:  149:            if (sent < 0) {
+        3:  148:            ssize_t sent = sendto(udpsock, input.c_str(), input.size(), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+        3:  149:            if (sent < 0) {
     #####:  150:                std::cerr << "Error sending data" << "\n";
     #####:  151:                break;
         -:  152:            }
         -:  153:            char buffer[UDP_BUFFER_SIZE];
-        4:  154:            ssize_t n = recvfrom(udpsock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&peer, &peer_len);
-        4:  155:            if (n < 0) {
+        3:  154:            ssize_t n = recvfrom(udpsock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&peer, &peer_len);
+        3:  155:            if (n < 0) {
     #####:  156:                std::cerr << "Error receiving data" << "\n";
     #####:  157:                break;
         -:  158:            }
-        4:  159:            buffer[n] = '\0'; // Null-terminate the received data
-        4:  160:            std::cout << "Received from server: " << buffer << "\n";
+        3:  159:            buffer[n] = '\0'; // Null-terminate the received data
+        3:  160:            std::cout << "Received from server: " << buffer;
         -:  161:        }
         -:  162:
         8:  163:    }

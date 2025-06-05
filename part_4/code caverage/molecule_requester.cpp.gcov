@@ -1,0 +1,114 @@
+        -:    0:Source:molecule_requester.cpp
+        -:    0:Graph:molecule_requester.gcno
+        -:    0:Data:molecule_requester.gcda
+        -:    0:Runs:3
+        -:    1:#include <iostream>
+        -:    2:#include <sstream>
+        -:    3:#include <string>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unistd.h>
+        -:    7:#include <fcntl.h>
+        -:    8:#include <sys/types.h>
+        -:    9:#include <sys/socket.h>
+        -:   10:#include <netdb.h>
+        -:   11:#include <arpa/inet.h>
+        -:   12:#include <unistd.h>
+        -:   13:
+        -:   14:enum{
+        -:   15:    UDP_BUFFER_SIZE = 1024,
+        -:   16:};
+        -:   17:
+        -:   18:
+        3:   19:int main(int argc, char* argv[]) {
+        3:   20:    const char* host = nullptr;
+        3:   21:    const char* port = nullptr;
+        -:   22:    int opt;
+        -:   23:
+        9:   24:    while ((opt = getopt(argc, argv, "h:p:")) != -1) {
+        6:   25:        switch (opt) {
+        3:   26:            case 'h':
+        3:   27:                host = optarg;
+        3:   28:                break;
+        3:   29:            case 'p':
+        3:   30:                port = optarg;
+        3:   31:                break;
+    #####:   32:            default:
+    #####:   33:                std::cerr << "Usage: " << argv[0] << " -h <hostname/IP> -p <port>\n";
+    #####:   34:                return 1;
+        -:   35:        }
+        -:   36:    }
+        -:   37:
+        3:   38:    if (host == nullptr || port == nullptr) {
+    #####:   39:        std::cerr << "ERROR: Hostname/IP and port must be specified\n";
+    #####:   40:        return 1;
+        -:   41:    }
+        -:   42:
+        3:   43:    addrinfo UDPhints{}, *resUDP;
+        3:   44:    UDPhints.ai_family = AF_UNSPEC;
+        3:   45:    UDPhints.ai_socktype = SOCK_DGRAM;
+        -:   46:
+        3:   47:    if (getaddrinfo(host, port, &UDPhints, &resUDP) != 0) {
+    #####:   48:        std::cerr << "Error getting address info (UDP)\n";
+    #####:   49:        return 1;
+        -:   50:    }
+        -:   51:
+        3:   52:    int udpsock = -1;
+        -:   53:    addrinfo* p;
+       3*:   54:    for (p = resUDP; p != nullptr; p = p->ai_next) {
+        3:   55:        udpsock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+       3*:   56:        if (udpsock < 0) {
+    #####:   57:            continue;
+        -:   58:        }
+        3:   59:        break;
+        -:   60:    }
+        -:   61:
+        3:   62:    if(p == nullptr) {
+    #####:   63:        std::cerr << "Failed creating UDP socket\n";
+    #####:   64:        freeaddrinfo(resUDP);
+    #####:   65:        return 1;
+        -:   66:    }
+        -:   67:
+        3:   68:    std::cout << "Connected to server: " << host << "UDP port: " << port << "\n";
+        3:   69:    std::cout << "Type 'DELIVER WATER|CARBON DIOXIDE|ALCOHOL|GLUCOSE <count>', or QUIT to exit.\n";
+        -:   70:
+        3:   71:    std::string input;
+        -:   72:    sockaddr_storage peer;
+        3:   73:    socklen_t peer_len = sizeof(peer);
+        -:   74:
+        -:   75:    while (true) {
+        6:   76:        std::cout << "> ";
+        6:   77:        if(!std::getline(std::cin, input) || input == "QUIT") {
+        3:   78:            break;
+        -:   79:        }
+       3*:   80:        if (input.empty()) {
+    #####:   81:            continue;
+        -:   82:        }
+        3:   83:        if (input.back() != '\n') {
+        3:   84:            input.push_back('\n');
+        -:   85:        }
+        -:   86:
+        -:   87: 
+        3:   88:        ssize_t sent = sendto(udpsock, input.c_str(), input.size(), 0, resUDP->ai_addr, resUDP->ai_addrlen);
+        3:   89:        if (sent < 0) {
+    #####:   90:            std::cerr << "Error sending data" << "\n";
+    #####:   91:            break;
+        -:   92:        }
+        -:   93:        char buffer[UDP_BUFFER_SIZE];
+        3:   94:        ssize_t n = recvfrom(udpsock, buffer, sizeof(buffer) - 1, 0, (sockaddr*)&peer, &peer_len);
+        3:   95:        if (n < 0) {
+    #####:   96:            std::cerr << "Error receiving data" << "\n";
+    #####:   97:            break;
+        -:   98:        }
+        3:   99:        buffer[n] = '\0'; // Null-terminate the received data
+        3:  100:        std::cout << "Received from server: " << buffer << "\n";
+        -:  101:
+        -:  102:
+        3:  103:    }
+        -:  104:
+        3:  105:    freeaddrinfo(resUDP);
+        3:  106:    close(udpsock);
+        3:  107:    std::cout << "Disconnected from server\n";
+        3:  108:    return 0;
+        -:  109:
+        -:  110:}

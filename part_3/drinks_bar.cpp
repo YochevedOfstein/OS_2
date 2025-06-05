@@ -14,9 +14,12 @@
 #include <arpa/inet.h>
 #include <set>
 #include <algorithm>
+#include <signal.h>
 
 constexpr size_t READ_BUFFER = 1024;
 constexpr unsigned long long MAX_ATOMS = 1000000000000000000ULL;
+
+static volatile sig_atomic_t keep_running = 1;
 
 // Map molecule name to its atom requirements: {C, H, O}
 const std::map<std::string, std::array<unsigned long long,3>> molecule_req = {
@@ -138,12 +141,18 @@ void processUDPCommand(int sock, const std::string& line, const sockaddr_in& cli
     }
 }
 
+void signalHandler(int) {
+    keep_running = 0;
+}
+
 int main(int argc, char* argv[]) {
     std::set<std::string> udp_peers; // Track UDP peers if needed
     if (argc != 3) {
         std::cerr << "Usage: " << argv[0] << " <tcp_port> <udp_port>\n";
         return 1;
     }
+
+    signal(SIGINT, signalHandler);
     int tcp_port = std::stoi(argv[1]);
     int udp_port = std::stoi(argv[2]);
 
@@ -192,7 +201,7 @@ int main(int argc, char* argv[]) {
     unsigned long long carbon = 0, oxygen = 0, hydrogen = 0;
 
     fd_set read_fds;
-    while (true) {
+    while (keep_running) {
         FD_ZERO(&read_fds);
         FD_SET(STDIN_FILENO, &read_fds);
         FD_SET(listener, &read_fds);
