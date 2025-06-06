@@ -1,0 +1,159 @@
+        -:    0:Source:molecule_requester.cpp
+        -:    0:Graph:molecule_requester.gcno
+        -:    0:Data:molecule_requester.gcda
+        -:    0:Runs:5
+        -:    1:#include <iostream>
+        -:    2:#include <sstream>
+        -:    3:#include <string>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unistd.h>
+        -:    7:#include <fcntl.h>
+        -:    8:#include <sys/types.h>
+        -:    9:#include <sys/socket.h>
+        -:   10:#include <netdb.h>
+        -:   11:#include <arpa/inet.h>
+        -:   12:#include <unistd.h>
+        -:   13:#include <algorithm>
+        -:   14:#include <sys/un.h>
+        -:   15:
+        -:   16:enum {
+        -:   17:    UDP_BUFFER_SIZE = 1024
+        -:   18:};
+        -:   19:
+        5:   20:int main(int argc, char* argv[]) {
+        5:   21:    const char* host = nullptr;
+        5:   22:    const char* port = nullptr;
+        5:   23:    const char* uds_path = nullptr;
+        -:   24:    int opt;
+        -:   25:
+       10:   26:    while ((opt = getopt(argc, argv, "h:p:f:")) != -1) {
+        5:   27:        switch (opt) {
+        3:   28:            case 'h':
+        3:   29:                host = optarg;
+        3:   30:                break;
+        1:   31:            case 'p':
+        1:   32:                port = optarg;
+        1:   33:                break;
+        1:   34:            case 'f':
+        1:   35:                uds_path = optarg;
+        1:   36:                break;
+    #####:   37:            default:
+        -:   38:                std::cerr << "Usage: " << argv[0]
+    #####:   39:                          << " (-h <hostname/IP> -p <port>) | (-f <uds_socket_path>)\n";
+    #####:   40:                return 1;
+        -:   41:        }
+        -:   42:    }
+        5:   43:    if (uds_path) {
+        1:   44:        if (host || port) {
+    #####:   45:            std::cerr << "ERROR: Cannot mix -f <uds_path> with -h/-p\n";
+    #####:   46:            return 1;
+        -:   47:        }
+        -:   48:    } else {
+        4:   49:        if (!(host && port)) {
+        3:   50:            std::cerr << "ERROR: Must specify either -h <hostname> -p <port> OR -f <uds_path>\n";
+        3:   51:            return 1;
+        -:   52:        }
+        -:   53:    }
+        -:   54:
+        2:   55:    int sock = -1;
+        2:   56:    sockaddr_storage server_addr{}; 
+        2:   57:    socklen_t server_len = 0;
+        -:   58:
+        2:   59:    if (uds_path) {
+        -:   60:        // --- UDS-datagram client ---
+        1:   61:        sock = socket(AF_UNIX, SOCK_DGRAM, 0);
+        1:   62:        if (sock < 0) {
+    #####:   63:            std::cerr << "Error creating UDS-datagram socket\n";
+    #####:   64:            return 1;
+        -:   65:        }
+        -:   66:
+        -:   67:        // We must bind to a local UDS path so we can receive replies
+        1:   68:        std::string client_path = "/tmp/udp_client_" + std::to_string(getpid());
+        1:   69:        unlink(client_path.c_str()); // remove old file if exists
+        -:   70:
+        1:   71:        sockaddr_un cli_addr_un{};
+        1:   72:        cli_addr_un.sun_family = AF_UNIX;
+        1:   73:        strncpy(cli_addr_un.sun_path, client_path.c_str(), sizeof(cli_addr_un.sun_path) - 1);
+        1:   74:        if (bind(sock, (sockaddr*)&cli_addr_un, sizeof(cli_addr_un)) < 0) {
+    #####:   75:            std::cerr << "Error binding UDS client socket to " << client_path << "\n";
+    #####:   76:            close(sock);
+    #####:   77:            return 1;
+        -:   78:        }
+        -:   79:
+        -:   80:        // Set up server address struct
+        1:   81:        sockaddr_un* srv_un = reinterpret_cast<sockaddr_un*>(&server_addr);
+        1:   82:        srv_un->sun_family = AF_UNIX;
+        1:   83:        strncpy(srv_un->sun_path, uds_path, sizeof(srv_un->sun_path) - 1);
+        1:   84:        server_len = sizeof(sockaddr_un);
+        -:   85:
+        1:   86:        std::cout << "Connected (UDS) to server path: " << uds_path << "\n";
+        1:   87:    }
+        -:   88:    else {
+        -:   89:        // --- UDP-IP client ---
+        1:   90:        sock = socket(AF_INET, SOCK_DGRAM, 0);
+        1:   91:        if (sock < 0) {
+    #####:   92:            std::cerr << "Error creating UDP socket\n";
+    #####:   93:            return 1;
+        -:   94:        }
+        -:   95:
+        1:   96:        addrinfo hints{}, *res;
+        1:   97:        hints.ai_family   = AF_UNSPEC;
+        1:   98:        hints.ai_socktype = SOCK_DGRAM;
+        1:   99:        if (getaddrinfo(host, port, &hints, &res) != 0) {
+    #####:  100:            std::cerr << "Error getting address info (UDP)\n";
+    #####:  101:            return 1;
+        -:  102:        }
+        -:  103:        // We do not need to bind, the OS will choose an ephemeral port for us
+        1:  104:        memcpy(&server_addr, res->ai_addr, res->ai_addrlen);
+        1:  105:        server_len = res->ai_addrlen;
+        1:  106:        freeaddrinfo(res);
+        -:  107:
+        1:  108:        std::cout << "Connected (UDP-IP) to " << host << " port " << port << "\n";
+        -:  109:    }
+        -:  110:
+        2:  111:    std::cout << "Type 'DELIVER WATER|CARBON DIOXIDE|ALCOHOL|GLUCOSE <count>', or QUIT to exit.\n";
+        2:  112:    std::string input;
+        -:  113:    while (true) {
+        8:  114:        std::cout << "> ";
+        8:  115:        if (!std::getline(std::cin, input) || input == "QUIT") {
+        2:  116:            break;
+        -:  117:        }
+       6*:  118:        if (input.empty()) {
+    #####:  119:            continue;
+        -:  120:        }
+        6:  121:        if (input.back() != '\n') {
+        6:  122:            input.push_back('\n');
+        -:  123:        }
+        -:  124:
+        -:  125:        // Send to server (AF_INET or AF_UNIX-dgram)
+        6:  126:        ssize_t sent = sendto(sock, input.c_str(), input.size(), 0,
+        -:  127:                              (sockaddr*)&server_addr, server_len);
+        6:  128:        if (sent < 0) {
+    #####:  129:            std::cerr << "Error sending data\n";
+    #####:  130:            break;
+        -:  131:        }
+        -:  132:
+        -:  133:        // Receive a reply
+        -:  134:        char buffer[UDP_BUFFER_SIZE];
+        6:  135:        sockaddr_storage recv_addr{};
+        6:  136:        socklen_t recv_len = sizeof(recv_addr);
+        6:  137:        ssize_t n = recvfrom(sock, buffer, sizeof(buffer) - 1, 0,
+        -:  138:                             (sockaddr*)&recv_addr, &recv_len);
+        6:  139:        if (n < 0) {
+    #####:  140:            std::cerr << "Error receiving data\n";
+    #####:  141:            break;
+        -:  142:        }
+        6:  143:        buffer[n] = '\0';
+        6:  144:        std::cout << "Received from server:\n" << buffer << "\n";
+        6:  145:    }
+        -:  146:
+        2:  147:    close(sock);
+        2:  148:    if (uds_path) {
+        -:  149:        // Remove client UDS socket file
+        1:  150:        std::string client_path = "/tmp/udp_client_" + std::to_string(getpid());
+        1:  151:        unlink(client_path.c_str());
+        1:  152:    }
+        2:  153:    std::cout << "Disconnected from server\n";
+        2:  154:    return 0;
+        -:  155:}
