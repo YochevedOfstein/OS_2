@@ -78,10 +78,13 @@ void start_udp_server(int port) {
         memset(buffer, 0, sizeof(buffer));
         recvfrom(sock, buffer, sizeof(buffer), 0, (sockaddr*)&client, &len);
         string request(buffer);
+        if (request == "quit") break;
         string response;
         handle_request(request, response);
         sendto(sock, response.c_str(), response.size(), 0, (sockaddr*)&client, len);
     }
+
+    close(sock);
 }
 
 void start_uds_server(const string& path) {
@@ -100,10 +103,13 @@ void start_uds_server(const string& path) {
         memset(buffer, 0, sizeof(buffer));
         recvfrom(sock, buffer, sizeof(buffer), 0, (sockaddr*)&client, &len);
         string request(buffer);
+        if (request == "quit") break;
         string response;
         handle_request(request, response);
         sendto(sock, response.c_str(), response.size(), 0, (sockaddr*)&client, len);
     }
+
+    close(sock);
 }
 
 int main(int argc, char* argv[]) {
