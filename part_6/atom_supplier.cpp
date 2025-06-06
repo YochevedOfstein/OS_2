@@ -1,58 +1,154 @@
 #include <iostream>
-#include <fstream>
 #include <sstream>
-#include <unistd.h>
-#include <vector>
 #include <string>
-#include <sys/stat.h>
+#include <cstring>
+#include <cstdlib>
+#include <unistd.h>
 #include <fcntl.h>
 #include <sys/types.h>
+#include <sys/socket.h>
+#include <netdb.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#include <algorithm>
+#include <sys/un.h>
 
-using namespace std;
+constexpr size_t TCP_BUFFER_SIZE = 1024;
 
-vector<string> split_line(const string& line) {
-    vector<string> tokens;
-    stringstream ss(line);
-    string token;
-    while (getline(ss, token, ',')) {
-        tokens.push_back(token);
+std::string readLine(int fd) {
+    std::string line;
+    char c;
+    while (true) {
+        ssize_t n = recv(fd, &c, 1, 0);
+        if (n <= 0) {
+            return std::string();
+        }
+        if (c == '\n') {
+            break;
+        }
+        line.push_back(c);
     }
-    return tokens;
+    return line;
 }
 
 int main(int argc, char* argv[]) {
-    if (argc != 3) {
-        cerr << "Usage: " << argv[0] << " <atom_type> <input_file>" << endl;
-        return 1;
-    }
+    const char* host = nullptr;
+    const char* port = nullptr;
+    const char* uds_path = nullptr;
+    int opt;
 
-    string atom_type = argv[1];
-    string input_file = argv[2];
-
-    ifstream infile(input_file);
-    if (!infile) {
-        cerr << "Failed to open input file." << endl;
-        return 1;
-    }
-
-    string output_dir = "atom_types";
-    mkdir(output_dir.c_str(), 0777);
-
-    string output_path = output_dir + "/" + atom_type + ".txt";
-    ofstream outfile(output_path, ios::app);
-
-    string line;
-    while (getline(infile, line)) {
-        vector<string> atoms = split_line(line);
-        for (const string& atom : atoms) {
-            outfile << atom << endl;
+    // We accept either (-h host -p port) OR (-f uds_path), but not both.
+    while ((opt = getopt(argc, argv, "h:p:f:")) != -1) {
+        switch (opt) {
+            case 'h':
+                host = optarg;
+                break;
+            case 'p':
+                port = optarg;
+                break;
+            case 'f':
+                uds_path = optarg;
+                break;
+            default:
+                std::cerr << "Usage: " << argv[0]
+                          << " (-h <hostname/IP> -p <port>) | (-f <uds_socket_path>)\n";
+                return 1;
         }
     }
 
-    outfile.close();
-    infile.close();
+    // Conflict check: if uds_path is set, host/port must be null; if host/port set, uds_path must be null
+    if (uds_path) {
+        if (host || port) {
+            std::cerr << "ERROR: Cannot mix -f <uds_path> with -h/-p\n";
+            return 1;
+        }
+    } else {
+        if (!(host && port)) {
+            std::cerr << "ERROR: Must specify either -h <hostname> -p <port> OR -f <uds_path>\n";
+            return 1;
+        }
+    }
 
-    cout << "Wrote atoms to " << output_path << endl;
+    int sock = -1;
 
+    if (uds_path) {
+        // --- connect over UDS-stream ---
+        sock = socket(AF_UNIX, SOCK_STREAM, 0);
+        if (sock < 0) {
+            std::cerr << "Error creating UDS socket\n";
+            return 1;
+        }
+        sockaddr_un addr_un{};
+        addr_un.sun_family = AF_UNIX;
+        strncpy(addr_un.sun_path, uds_path, sizeof(addr_un.sun_path) - 1);
+
+        if (connect(sock, (sockaddr*)&addr_un, sizeof(addr_un)) < 0) {
+            std::cerr << "ERROR: Unable to connect to UDS path: " << uds_path << "\n";
+            return 1;
+        }
+        std::cout << "Connected (UDS) to: " << uds_path << "\n";
+    } else {
+        // --- connect over TCP ---
+        addrinfo hints{}, *res;
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        if (getaddrinfo(host, port, &hints, &res) != 0) {
+            std::cerr << "Error getting address info (TCP)\n";
+            return 1;
+        }
+        for (addrinfo* p = res; p != nullptr; p = p->ai_next) {
+            sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+            if (sock < 0) continue;
+            if (connect(sock, p->ai_addr, p->ai_addrlen) == 0) {
+                break;
+            }
+            close(sock);
+            sock = -1;
+        }
+        freeaddrinfo(res);
+        if (sock < 0) {
+            std::cerr << "ERROR: Unable to connect (TCP)\n";
+            return 1;
+        }
+        std::cout << "Connected (TCP) to " << host << " port " << port << "\n";
+    }
+
+    std::cout << "Type ADD CARBON|OXYGEN|HYDROGEN <number> to request atoms, or QUIT to exit\n";
+    std::string input;
+    while (true) {
+        std::cout << "> ";
+        if (!std::getline(std::cin, input)) {
+            break;
+        }
+        if (input == "QUIT") {
+            break;
+        }
+        if (input.back() != '\n') {
+            input.push_back('\n');
+        }
+        if (send(sock, input.c_str(), input.size(), 0) < 0) {
+            std::cerr << "Error sending data to server\n";
+            break;
+        }
+
+        // First response line
+        std::string line1 = readLine(sock);
+        if (line1.empty()) {
+            std::cerr << "Server disconnected\n";
+            break;
+        }
+        std::cout << line1 << "\n";
+
+        // If it starts with "CARBON", read two more lines
+        if (line1.rfind("CARBON", 0) == 0) {
+            std::string line2 = readLine(sock);
+            std::string line3 = readLine(sock);
+            if (!line2.empty()) std::cout << line2 << "\n";
+            if (!line3.empty()) std::cout << line3 << "\n";
+        }
+    }
+
+    close(sock);
+    std::cout << "Disconnected from server\n";
     return 0;
 }

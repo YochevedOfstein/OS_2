@@ -1,18 +1,20 @@
-CXX = g++
-CXXFLAGS = -Wall -Wextra -std=c++17
-
-TARGETS = uds_server uds_client molecule_supplier_stage5
+CXX = g++  
+CXXFLAGS = -std=c++11 -Wall -Wextra -fprofile-arcs -ftest-coverage -O0
+LDFLAGS = -lgcov
+TARGETS = drinks_bar molecule_requester atom_supplier
 
 all: $(TARGETS)
 
-uds_server: uds_server.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+atom_supplier: atom_supplier.cpp
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
-uds_client: uds_client.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+molecule_requester: molecule_requester.cpp
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
-molecule_supplier_stage5: molecule_supplier_stage5.cpp
-	$(CXX) $(CXXFLAGS) -o $@ $<
+drinks_bar: drinks_bar.cpp
+	$(CXX) $(CXXFLAGS) $(LDFLAGS) -o $@ $<
 
 clean:
-	rm -f $(TARGETS)
+	rm -f $(TARGETS) *.gcda *.gcno *.gcov
+
+.PHONY: all clean
