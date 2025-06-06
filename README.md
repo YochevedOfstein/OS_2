@@ -10,7 +10,7 @@ Names: Lior Telman, Yocheved Ofstein
    - Folders: part_1 through part_6 
    - Source code files  
    - Individual makefiles for each question  
-   - Screenshots
+   - Code coverage files
    - A main Makefile in the root directory  
    - This README.md file
 
@@ -30,6 +30,7 @@ all:
 	$(MAKE) -C part_3
 	$(MAKE) -C part_4
 	$(MAKE) -C part_5
+	$(MAKE) -C part_6
 
 clean:
 	$(MAKE) -C part_1 clean
@@ -37,6 +38,7 @@ clean:
 	$(MAKE) -C part_3 clean
 	$(MAKE) -C part_4 clean
 	$(MAKE) -C part_5 clean
+	$(MAKE) -C part_6 clean
 
 .PHONY: all clean
 ```
