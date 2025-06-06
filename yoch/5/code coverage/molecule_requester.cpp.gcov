@@ -1,7 +1,7 @@
         -:    0:Source:molecule_requester.cpp
         -:    0:Graph:molecule_requester.gcno
         -:    0:Data:molecule_requester.gcda
-        -:    0:Runs:1
+        -:    0:Runs:5
         -:    1:#include <iostream>
         -:    2:#include <sstream>
         -:    3:#include <string>
@@ -21,20 +21,20 @@
         -:   17:    UDP_BUFFER_SIZE = 1024
         -:   18:};
         -:   19:
-        1:   20:int main(int argc, char* argv[]) {
-        1:   21:    const char* host = nullptr;
-        1:   22:    const char* port = nullptr;
-        1:   23:    const char* uds_path = nullptr;
+        5:   20:int main(int argc, char* argv[]) {
+        5:   21:    const char* host = nullptr;
+        5:   22:    const char* port = nullptr;
+        5:   23:    const char* uds_path = nullptr;
         -:   24:    int opt;
         -:   25:
-        2:   26:    while ((opt = getopt(argc, argv, "h:p:f:")) != -1) {
-        1:   27:        switch (opt) {
-    #####:   28:            case 'h':
-    #####:   29:                host = optarg;
-    #####:   30:                break;
-    #####:   31:            case 'p':
-    #####:   32:                port = optarg;
-    #####:   33:                break;
+        9:   26:    while ((opt = getopt(argc, argv, "h:p:f:")) != -1) {
+        4:   27:        switch (opt) {
+        2:   28:            case 'h':
+        2:   29:                host = optarg;
+        2:   30:                break;
+        1:   31:            case 'p':
+        1:   32:                port = optarg;
+        1:   33:                break;
         1:   34:            case 'f':
         1:   35:                uds_path = optarg;
         1:   36:                break;
@@ -44,23 +44,23 @@
     #####:   40:                return 1;
         -:   41:        }
         -:   42:    }
-        1:   43:    if (uds_path) {
+        5:   43:    if (uds_path) {
         1:   44:        if (host || port) {
     #####:   45:            std::cerr << "ERROR: Cannot mix -f <uds_path> with -h/-p\n";
     #####:   46:            return 1;
         -:   47:        }
         -:   48:    } else {
-    #####:   49:        if (!(host && port)) {
-    #####:   50:            std::cerr << "ERROR: Must specify either -h <hostname> -p <port> OR -f <uds_path>\n";
-    #####:   51:            return 1;
+        4:   49:        if (!(host && port)) {
+        3:   50:            std::cerr << "ERROR: Must specify either -h <hostname> -p <port> OR -f <uds_path>\n";
+        3:   51:            return 1;
         -:   52:        }
         -:   53:    }
         -:   54:
-        1:   55:    int sock = -1;
-        1:   56:    sockaddr_storage server_addr{}; 
-        1:   57:    socklen_t server_len = 0;
+        2:   55:    int sock = -1;
+        2:   56:    sockaddr_storage server_addr{}; 
+        2:   57:    socklen_t server_len = 0;
         -:   58:
-        1:   59:    if (uds_path) {
+        2:   59:    if (uds_path) {
         -:   60:        // --- UDS-datagram client ---
         1:   61:        sock = socket(AF_UNIX, SOCK_DGRAM, 0);
         1:   62:        if (sock < 0) {
@@ -91,69 +91,69 @@
         1:   87:    }
         -:   88:    else {
         -:   89:        // --- UDP-IP client ---
-    #####:   90:        sock = socket(AF_INET, SOCK_DGRAM, 0);
-    #####:   91:        if (sock < 0) {
+        1:   90:        sock = socket(AF_INET, SOCK_DGRAM, 0);
+        1:   91:        if (sock < 0) {
     #####:   92:            std::cerr << "Error creating UDP socket\n";
     #####:   93:            return 1;
         -:   94:        }
         -:   95:
-    #####:   96:        addrinfo hints{}, *res;
-    #####:   97:        hints.ai_family   = AF_UNSPEC;
-    #####:   98:        hints.ai_socktype = SOCK_DGRAM;
-    #####:   99:        if (getaddrinfo(host, port, &hints, &res) != 0) {
+        1:   96:        addrinfo hints{}, *res;
+        1:   97:        hints.ai_family   = AF_UNSPEC;
+        1:   98:        hints.ai_socktype = SOCK_DGRAM;
+        1:   99:        if (getaddrinfo(host, port, &hints, &res) != 0) {
     #####:  100:            std::cerr << "Error getting address info (UDP)\n";
     #####:  101:            return 1;
         -:  102:        }
         -:  103:        // We do not need to bind, the OS will choose an ephemeral port for us
-    #####:  104:        memcpy(&server_addr, res->ai_addr, res->ai_addrlen);
-    #####:  105:        server_len = res->ai_addrlen;
-    #####:  106:        freeaddrinfo(res);
+        1:  104:        memcpy(&server_addr, res->ai_addr, res->ai_addrlen);
+        1:  105:        server_len = res->ai_addrlen;
+        1:  106:        freeaddrinfo(res);
         -:  107:
-    #####:  108:        std::cout << "Connected (UDP-IP) to " << host << " port " << port << "\n";
+        1:  108:        std::cout << "Connected (UDP-IP) to " << host << " port " << port << "\n";
         -:  109:    }
         -:  110:
-        1:  111:    std::cout << "Type 'DELIVER WATER|CARBON DIOXIDE|ALCOHOL|GLUCOSE <count>', or QUIT to exit.\n";
-        1:  112:    std::string input;
+        2:  111:    std::cout << "Type 'DELIVER WATER|CARBON DIOXIDE|ALCOHOL|GLUCOSE <count>', or QUIT to exit.\n";
+        2:  112:    std::string input;
         -:  113:    while (true) {
-        4:  114:        std::cout << "> ";
-        4:  115:        if (!std::getline(std::cin, input) || input == "QUIT") {
-        1:  116:            break;
+       10:  114:        std::cout << "> ";
+       10:  115:        if (!std::getline(std::cin, input) || input == "QUIT") {
+        2:  116:            break;
         -:  117:        }
-       3*:  118:        if (input.empty()) {
+       8*:  118:        if (input.empty()) {
     #####:  119:            continue;
         -:  120:        }
-        3:  121:        if (input.back() != '\n') {
-        3:  122:            input.push_back('\n');
+        8:  121:        if (input.back() != '\n') {
+        8:  122:            input.push_back('\n');
         -:  123:        }
         -:  124:
         -:  125:        // Send to server (AF_INET or AF_UNIX-dgram)
-        3:  126:        ssize_t sent = sendto(sock, input.c_str(), input.size(), 0,
+        8:  126:        ssize_t sent = sendto(sock, input.c_str(), input.size(), 0,
         -:  127:                              (sockaddr*)&server_addr, server_len);
-        3:  128:        if (sent < 0) {
+        8:  128:        if (sent < 0) {
     #####:  129:            std::cerr << "Error sending data\n";
     #####:  130:            break;
         -:  131:        }
         -:  132:
         -:  133:        // Receive a reply
         -:  134:        char buffer[UDP_BUFFER_SIZE];
-        3:  135:        sockaddr_storage recv_addr{};
-        3:  136:        socklen_t recv_len = sizeof(recv_addr);
-        3:  137:        ssize_t n = recvfrom(sock, buffer, sizeof(buffer) - 1, 0,
+        8:  135:        sockaddr_storage recv_addr{};
+        8:  136:        socklen_t recv_len = sizeof(recv_addr);
+        8:  137:        ssize_t n = recvfrom(sock, buffer, sizeof(buffer) - 1, 0,
         -:  138:                             (sockaddr*)&recv_addr, &recv_len);
-        3:  139:        if (n < 0) {
+        8:  139:        if (n < 0) {
     #####:  140:            std::cerr << "Error receiving data\n";
     #####:  141:            break;
         -:  142:        }
-        3:  143:        buffer[n] = '\0';
-        3:  144:        std::cout << "Received from server:\n" << buffer << "\n";
-        3:  145:    }
+        8:  143:        buffer[n] = '\0';
+        8:  144:        std::cout << "Received from server:\n" << buffer << "\n";
+        8:  145:    }
         -:  146:
-        1:  147:    close(sock);
-        1:  148:    if (uds_path) {
+        2:  147:    close(sock);
+        2:  148:    if (uds_path) {
         -:  149:        // Remove client UDS socket file
         1:  150:        std::string client_path = "/tmp/udp_client_" + std::to_string(getpid());
         1:  151:        unlink(client_path.c_str());
         1:  152:    }
-        1:  153:    std::cout << "Disconnected from server\n";
-        1:  154:    return 0;
+        2:  153:    std::cout << "Disconnected from server\n";
+        2:  154:    return 0;
         -:  155:}
