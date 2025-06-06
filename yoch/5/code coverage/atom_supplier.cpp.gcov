@@ -1,0 +1,158 @@
+        -:    0:Source:atom_supplier.cpp
+        -:    0:Graph:atom_supplier.gcno
+        -:    0:Data:atom_supplier.gcda
+        -:    0:Runs:1
+        -:    1:#include <iostream>
+        -:    2:#include <sstream>
+        -:    3:#include <string>
+        -:    4:#include <cstring>
+        -:    5:#include <cstdlib>
+        -:    6:#include <unistd.h>
+        -:    7:#include <fcntl.h>
+        -:    8:#include <sys/types.h>
+        -:    9:#include <sys/socket.h>
+        -:   10:#include <netdb.h>
+        -:   11:#include <arpa/inet.h>
+        -:   12:#include <unistd.h>
+        -:   13:#include <algorithm>
+        -:   14:#include <sys/un.h>
+        -:   15:
+        -:   16:constexpr size_t TCP_BUFFER_SIZE = 1024;
+        -:   17:
+        3:   18:std::string readLine(int fd) {
+        3:   19:    std::string line;
+        -:   20:    char c;
+        -:   21:    while (true) {
+       51:   22:        ssize_t n = recv(fd, &c, 1, 0);
+       51:   23:        if (n <= 0) {
+    #####:   24:            return std::string();
+        -:   25:        }
+       51:   26:        if (c == '\n') {
+        3:   27:            break;
+        -:   28:        }
+       48:   29:        line.push_back(c);
+       48:   30:    }
+        3:   31:    return line;
+        3:   32:}
+        -:   33:
+        1:   34:int main(int argc, char* argv[]) {
+        1:   35:    const char* host = nullptr;
+        1:   36:    const char* port = nullptr;
+        1:   37:    const char* uds_path = nullptr;
+        -:   38:    int opt;
+        -:   39:
+        -:   40:    // We accept either (-h host -p port) OR (-f uds_path), but not both.
+        2:   41:    while ((opt = getopt(argc, argv, "h:p:f:")) != -1) {
+        1:   42:        switch (opt) {
+    #####:   43:            case 'h':
+    #####:   44:                host = optarg;
+    #####:   45:                break;
+    #####:   46:            case 'p':
+    #####:   47:                port = optarg;
+    #####:   48:                break;
+        1:   49:            case 'f':
+        1:   50:                uds_path = optarg;
+        1:   51:                break;
+    #####:   52:            default:
+        -:   53:                std::cerr << "Usage: " << argv[0]
+    #####:   54:                          << " (-h <hostname/IP> -p <port>) | (-f <uds_socket_path>)\n";
+    #####:   55:                return 1;
+        -:   56:        }
+        -:   57:    }
+        -:   58:
+        -:   59:    // Conflict check: if uds_path is set, host/port must be null; if host/port set, uds_path must be null
+        1:   60:    if (uds_path) {
+        1:   61:        if (host || port) {
+    #####:   62:            std::cerr << "ERROR: Cannot mix -f <uds_path> with -h/-p\n";
+    #####:   63:            return 1;
+        -:   64:        }
+        -:   65:    } else {
+    #####:   66:        if (!(host && port)) {
+    #####:   67:            std::cerr << "ERROR: Must specify either -h <hostname> -p <port> OR -f <uds_path>\n";
+    #####:   68:            return 1;
+        -:   69:        }
+        -:   70:    }
+        -:   71:
+        1:   72:    int sock = -1;
+        -:   73:
+        1:   74:    if (uds_path) {
+        -:   75:        // --- connect over UDS-stream ---
+        1:   76:        sock = socket(AF_UNIX, SOCK_STREAM, 0);
+        1:   77:        if (sock < 0) {
+    #####:   78:            std::cerr << "Error creating UDS socket\n";
+    #####:   79:            return 1;
+        -:   80:        }
+        1:   81:        sockaddr_un addr_un{};
+        1:   82:        addr_un.sun_family = AF_UNIX;
+        1:   83:        strncpy(addr_un.sun_path, uds_path, sizeof(addr_un.sun_path) - 1);
+        -:   84:
+        1:   85:        if (connect(sock, (sockaddr*)&addr_un, sizeof(addr_un)) < 0) {
+    #####:   86:            std::cerr << "ERROR: Unable to connect to UDS path: " << uds_path << "\n";
+    #####:   87:            return 1;
+        -:   88:        }
+        1:   89:        std::cout << "Connected (UDS) to: " << uds_path << "\n";
+        -:   90:    } else {
+        -:   91:        // --- connect over TCP ---
+    #####:   92:        addrinfo hints{}, *res;
+    #####:   93:        hints.ai_family = AF_UNSPEC;
+    #####:   94:        hints.ai_socktype = SOCK_STREAM;
+    #####:   95:        if (getaddrinfo(host, port, &hints, &res) != 0) {
+    #####:   96:            std::cerr << "Error getting address info (TCP)\n";
+    #####:   97:            return 1;
+        -:   98:        }
+    #####:   99:        for (addrinfo* p = res; p != nullptr; p = p->ai_next) {
+    #####:  100:            sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    #####:  101:            if (sock < 0) continue;
+    #####:  102:            if (connect(sock, p->ai_addr, p->ai_addrlen) == 0) {
+    #####:  103:                break;
+        -:  104:            }
+    #####:  105:            close(sock);
+    #####:  106:            sock = -1;
+        -:  107:        }
+    #####:  108:        freeaddrinfo(res);
+    #####:  109:        if (sock < 0) {
+    #####:  110:            std::cerr << "ERROR: Unable to connect (TCP)\n";
+    #####:  111:            return 1;
+        -:  112:        }
+    #####:  113:        std::cout << "Connected (TCP) to " << host << " port " << port << "\n";
+        -:  114:    }
+        -:  115:
+        1:  116:    std::cout << "Type ADD CARBON|OXYGEN|HYDROGEN <number> to request atoms, or QUIT to exit\n";
+        1:  117:    std::string input;
+        -:  118:    while (true) {
+        2:  119:        std::cout << "> ";
+        2:  120:        if (!std::getline(std::cin, input)) {
+    #####:  121:            break;
+        -:  122:        }
+        2:  123:        if (input == "QUIT") {
+        1:  124:            break;
+        -:  125:        }
+        1:  126:        if (input.back() != '\n') {
+        1:  127:            input.push_back('\n');
+        -:  128:        }
+        1:  129:        if (send(sock, input.c_str(), input.size(), 0) < 0) {
+    #####:  130:            std::cerr << "Error sending data to server\n";
+    #####:  131:            break;
+        -:  132:        }
+        -:  133:
+        -:  134:        // First response line
+        1:  135:        std::string line1 = readLine(sock);
+        1:  136:        if (line1.empty()) {
+    #####:  137:            std::cerr << "Server disconnected\n";
+    #####:  138:            break;
+        -:  139:        }
+        1:  140:        std::cout << line1 << "\n";
+        -:  141:
+        -:  142:        // If it starts with "CARBON", read two more lines
+        1:  143:        if (line1.rfind("CARBON", 0) == 0) {
+        1:  144:            std::string line2 = readLine(sock);
+        1:  145:            std::string line3 = readLine(sock);
+        1:  146:            if (!line2.empty()) std::cout << line2 << "\n";
+        1:  147:            if (!line3.empty()) std::cout << line3 << "\n";
+        1:  148:        }
+        2:  149:    }
+        -:  150:
+        1:  151:    close(sock);
+        1:  152:    std::cout << "Disconnected from server\n";
+        1:  153:    return 0;
+        -:  154:}
