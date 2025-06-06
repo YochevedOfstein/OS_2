@@ -21,9 +21,12 @@
 #include <sys/stat.h>
 #include <sys/mman.h>
 #include <netdb.h>
+#include <signal.h>
 
 constexpr size_t READ_BUFFER = 1024;
 constexpr unsigned long long MAX_ATOMS = 1000000000000000000ULL;
+
+static volatile sig_atomic_t keep_running = 1;
 
 struct Inventory {
     unsigned long long carbon;
@@ -209,11 +212,17 @@ void processDatagramCommand(int sock,
     }
 }
 
+void signalHandler(int) {
+    keep_running = 0;
+}
+
 int main(int argc, char* argv[]) {
     unsigned long long initcarbon = 0, initoxygen = 0, inithydrogen = 0;
     int timeout_seconds = -1;
     int tcp_port = -1, udp_port = -1;
     std::string uds_stream_path, uds_datagram_path;
+
+    signal(SIGINT, signalHandler);
 
     static struct option long_options[] = {
         {"timeout",       required_argument, nullptr, 't'},
@@ -392,7 +401,7 @@ int main(int argc, char* argv[]) {
     std::set<std::string> udp_peers;
 
     fd_set read_fds;
-    while (true) {
+    while (keep_running) {
         FD_ZERO(&read_fds);
         FD_SET(STDIN_FILENO, &read_fds);
         int max_fd = STDIN_FILENO;

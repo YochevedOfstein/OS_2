@@ -1,5 +1,6 @@
 CXX = g++ 
-CXXFLAGS = -std=c++11 -Wall -Wextra -O2
+CXXFLAGS = -std=c++11 -Wall -Wextra -fprofile-arcs -ftest-coverage -O0
+LDFLAGS = -lgcov
 TARGETS = drinks_bar molecule_requester atom_supplier
 
 all: $(TARGETS)
@@ -14,6 +15,6 @@ drinks_bar: drinks_bar.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
 clean:
-	rm -f $(TARGETS)
+	rm -f $(TARGETS) *.gcda *.gcno *.gcov
 
 .PHONY: all clean
