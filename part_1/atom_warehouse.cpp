@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
     int port = std::stoi(argv[1]);
     int listener = socket(AF_INET, SOCK_STREAM, 0);
     if (listener < 0) {
-        std::cerr << "Error creating socket" << "\n";
+        // std::cerr << "Error creating socket" << "\n";
         return 1;
     }
 
@@ -101,7 +101,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     if (listen(listener, SOMAXCONN) < 0) {
-        std::cerr << "Error listening on socket" << "\n";
+        // std::cerr << "Error listening on socket" << "\n";
         close(listener);
         return 1;
     }
@@ -137,7 +137,7 @@ int main(int argc, char* argv[]) {
             socklen_t cli_len = sizeof(cli_addr);
             int client_fd = accept(listener, (sockaddr*)&cli_addr, &cli_len);
             if (client_fd < 0) {
-                std::cerr << "Error accepting connection" << "\n";
+                // std::cerr << "Error accepting connection" << "\n";
                 continue;
             }
             setNonBlocking(client_fd);

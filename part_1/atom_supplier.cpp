@@ -18,7 +18,7 @@ std::string readLine(int fd) {
     while(true) {
         ssize_t n = recv(fd, &c, 1, 0);
         if (n <= 0){
-            return std::string();
+            // return std::string();
         }
         if (c == '\n') {
             break;
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     hints.ai_socktype = SOCK_STREAM;
 
     if(getaddrinfo(server, port, &hints, &res) != 0) {
-        std::cerr << "Error getting address info" << "\n";
+        // std::cerr << "Error getting address info" << "\n";
         return 1;
     }
 
@@ -81,10 +81,10 @@ int main(int argc, char* argv[]) {
         }
 
         std::string line1 = readLine(sock);
-        if (line1.empty()) {
-            std::cerr << "Server disconnected" << "\n";
-            break;
-        }
+        // if (line1.empty()) {
+        //     std::cerr << "Server disconnected" << "\n";
+        //     break;
+        // }
         std::cout << line1 << "\n";
 
         if(line1.rfind("CARBON", 0) == 0){

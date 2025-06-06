@@ -16,21 +16,21 @@
         -:   12:
         -:   13:
         -:   14:
-       18:   15:std::string readLine(int fd) {
-       18:   16:    std::string line;
+       13:   15:std::string readLine(int fd) {
+       13:   16:    std::string line;
         -:   17:    char c;
         -:   18:    while(true) {
-      286:   19:        ssize_t n = recv(fd, &c, 1, 0);
-      286:   20:        if (n <= 0){
-    #####:   21:            return std::string();
+      242:   19:        ssize_t n = recv(fd, &c, 1, 0);
+        -:   20:        if (n <= 0){
+        -:   21:            // return std::string();
         -:   22:        }
-      286:   23:        if (c == '\n') {
-       18:   24:            break;
+      242:   23:        if (c == '\n') {
+       13:   24:            break;
         -:   25:        }
-      268:   26:        line.push_back(c);
-      268:   27:    }
-       18:   28:    return line;
-       18:   29:}
+      229:   26:        line.push_back(c);
+      229:   27:    }
+       26:   28:    return line;
+    =====:   29:}
         -:   30:
         3:   31:int main(int argc, char* argv[]) {
         3:   32:    if (argc != 3) {
@@ -45,7 +45,7 @@
         1:   41:    hints.ai_socktype = SOCK_STREAM;
         -:   42:
         1:   43:    if(getaddrinfo(server, port, &hints, &res) != 0) {
-    #####:   44:        std::cerr << "Error getting address info" << "\n";
+        -:   44:        // std::cerr << "Error getting address info" << "\n";
     #####:   45:        return 1;
         -:   46:    }
         -:   47:
@@ -71,38 +71,38 @@
         -:   67:
         1:   68:    std::string input;
         -:   69:    while (true) {
-       11:   70:        std::cout << "> ";
-       11:   71:        std::getline(std::cin, input);
-       11:   72:        if (input == "QUIT") {
+        8:   70:        std::cout << "> ";
+        8:   71:        std::getline(std::cin, input);
+        8:   72:        if (input == "QUIT") {
         1:   73:            break;
         -:   74:        }
-       10:   75:        if(input.back() != '\n') {
-       10:   76:            input.push_back('\n');
+        7:   75:        if(input.back() != '\n') {
+        7:   76:            input.push_back('\n');
         -:   77:        }
-       10:   78:        if(send(sock, input.c_str(), input.size(), 0) < 0) {
+        7:   78:        if(send(sock, input.c_str(), input.size(), 0) < 0) {
     #####:   79:            std::cerr << "Error sending data to server" << "\n";
     #####:   80:            break;
         -:   81:        }
         -:   82:
-       10:   83:        std::string line1 = readLine(sock);
-       10:   84:        if (line1.empty()) {
-    #####:   85:            std::cerr << "Server disconnected" << "\n";
-    #####:   86:            break;
-        -:   87:        }
-       10:   88:        std::cout << line1 << "\n";
+        7:   83:        std::string line1 = readLine(sock);
+        -:   84:        // if (line1.empty()) {
+        -:   85:        //     std::cerr << "Server disconnected" << "\n";
+        -:   86:        //     break;
+        -:   87:        // }
+        7:   88:        std::cout << line1 << "\n";
         -:   89:
-       10:   90:        if(line1.rfind("CARBON", 0) == 0){
-        4:   91:            std::string line2 = readLine(sock);
-        4:   92:            std::string line3 = readLine(sock);
-        4:   93:            if(!line2.empty()) {
-        4:   94:                std::cout << line2 << "\n";
+        7:   90:        if(line1.rfind("CARBON", 0) == 0){
+        3:   91:            std::string line2 = readLine(sock);
+        3:   92:            std::string line3 = readLine(sock);
+        3:   93:            if(!line2.empty()) {
+        3:   94:                std::cout << line2 << "\n";
         -:   95:            }
-        4:   96:            if(!line3.empty()) {
-        4:   97:                std::cout << line3 << "\n";
+        3:   96:            if(!line3.empty()) {
+        3:   97:                std::cout << line3 << "\n";
         -:   98:            }
-        4:   99:        }
+        3:   99:        }
         -:  100:
-       20:  101:    }
+        7:  101:    }
         1:  102:    close(sock);
         1:  103:    std::cout << "Disconnected from server\n";
         1:  104:    return 0;
